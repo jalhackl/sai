@@ -1290,7 +1290,7 @@ def compute_LD_D_maladapt(
     ploidy: int = 1,
     compute_r: bool = True,
     maladapt_correction: bool = True,
-) -> tuple[np.ndarray, np.ndarray] | np.ndarray:
+) -> Union[tuple[np.ndarray, np.ndarray], np.ndarray]: 
     """
     Computes the linkage disequilibrium coefficient D and optionally the correlation coefficient r for pairs of SNPs,
     with an option to apply maladaptation correction.
@@ -1386,6 +1386,43 @@ def compute_LD_D_maladapt(
         return ld_matrix, r_matrix
     else:
         return ld_matrix
+
+
+def Kellys_Zns(gts: np.ndarray, params_LD = {"filter_unique": True, "maladapt_correction": False}) -> float:
+    """
+    Computes the Zns metric, which quantifies the overall strength of
+    linkage disequilibrium (LD) across SNPs using pairwise correlation
+    coefficients (r) between SNPs in a genotypic dataset, based on the squared correlation of allelic identity between loci.
+
+    Parameters
+    ----------
+    gts : np.ndarray
+        A 2D numpy array representing genotypic data, where rows represent
+        SNPs and columns represent individuals. The shape of the array is
+        (num_snps, num_individuals).
+    params_LD: dict
+        Dictionary with extra parameters for the LD calculation function.
+
+    Returns
+    -------
+    float
+        The Zns value
+
+    """
+    ld_matrix, r_matrix = compute_LD_D(
+        gts, compute_r=True, **params_LD
+    )
+
+    S = r_matrix.shape[0]
+
+    # values above the diagonal
+    values_above_diagonal = r_matrix[np.triu_indices(S, k=1)]
+    r_squared = values_above_diagonal**2
+
+    prefactor = 2 / (S * (S - 1))
+    Zns = np.nansum(r_squared)
+    Zns = prefactor * Zns
+    return Zns
 
 
 # FILET features
