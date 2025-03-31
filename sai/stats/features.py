@@ -963,7 +963,7 @@ def H2_H1_ratio(
     H2 = H2_value(gts, only_derived_homozygous=only_derived_homozygous, ploidy=ploidy)
 
     H1, H12 = H1_H12_values(
-        gts, only_derived_homozygous=only_derived_homozygous, ploidy=1
+        gts, only_derived_homozygous=only_derived_homozygous, ploidy=ploidy
     )
 
     H2_H1 = H2 / H1
