@@ -1206,12 +1206,12 @@ def compute_LD_D_haploid(gts, ploidy=1, compute_r=True, phased=True):
 def compute_ld_burrows(
     gts: np.ndarray,
     compute_r: bool = True,
-    ploidy: int = 1,
+    ploidy: int = 2,
 ) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
     """
     Computes the linkage disequilibrium coefficient D for all pairs of SNPs in phased data.
     Using the formulae for D estimation from Ragsdale 2019: Unbiased Estimation of Linkage Disequilibrium from Unphased
-    Data (Burrows “composite covariance measure of LD)
+    Data (Burrows composite covariance measure of LD).
     Should work ONLY for diploid unphased!!!
 
     Parameters
@@ -1238,6 +1238,9 @@ def compute_ld_burrows(
         - If `compute_r` is False, only the `ld_matrix` is returned, which contains the D values.
 
     """
+
+    if ploidy != 2:
+        print("Warning! This function for estimating LD is intended for diploid unphased data (encoded as 0,1,2)!")
 
     num_snps, num_individuals = gts.shape
 
