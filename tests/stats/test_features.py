@@ -585,7 +585,10 @@ def test_compute_LD_D():
         [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]]
     )
 
-    assert np.allclose(np.nanmean(compute_LD_D(gts, compute_r=False)), expected_result, atol=1e-6)
+    assert np.allclose(
+        np.nanmean(compute_LD_D(gts, compute_r=False)), expected_result, atol=1e-6
+    )
+
 
 def test_Kellys_Zns():
     expected_result = 1 / 2

@@ -312,7 +312,7 @@ def calc_rd(
     src_gts: np.ndarray,
     tgt_gts: np.ndarray,
     ref_gts: np.ndarray = None,
-    metric: str = "hamming",
+    metric: str = "cityblock",
 ) -> float:
     """
     Compute the average ratio of sequence divergence between an individual from the
@@ -342,7 +342,7 @@ def calc_rd(
         of the same shape as `tgt_gts` is used. Default is `None`.
 
     metric : str, optional
-        The distance metric to use for the pairwise distance calculation. Default is "hamming".
+        The distance metric to use for the pairwise distance calculation. Default is "cityblock".
 
     Returns
     -------
@@ -500,7 +500,7 @@ def heterozygosity(tgt_gts: np.ndarray, ploidy: int = 1) -> float:
 
 
 def num_segregating_sites(
-    gts: np.ndarray, return_frequencies: bool = False
+    gts: np.ndarray, return_frequencies: bool = False, ploidy: int = 1
 ) -> Union[int, tuple[int, np.ndarray]]:
     """
     Computes the number of segregating sites in a genotype matrix.
@@ -514,6 +514,8 @@ def num_segregating_sites(
         A 2D NumPy array where each row represents a locus and each column represents an individual.
     return_frequencies : bool, optional
         If True, also returns the allele frequencies at segregating sites. Default is False.
+    ploidy : int, optional
+        The ploidy level of the organism (default is 1).
 
     Returns
     -------
@@ -524,7 +526,7 @@ def num_segregating_sites(
         and an array of their frequencies.
     """
     # Compute allele frequencies for each locus
-    gts_freq = calc_freq(gts)
+    gts_freq = calc_freq(gts, ploidy=ploidy)
 
     # Identify segregating sites (where 0 < p < 1)
     segregating_mask = (gts_freq > 0) & (gts_freq < 1)
@@ -741,6 +743,82 @@ def theta_W(gts: np.ndarray, ploidy: int = 1) -> float:
     return theta_W
 
 
+def theta_pi(gts: np.ndarray, ploidy: int = 1, metric: str = "cityblock") -> float:
+    """
+    Calculates theta_pi from genotype data,
+    following Zeng et al. 2006: Statistical Tests for Detecting Positive Selection by Utilizing High-Frequency Variants
+    Should in principle (using cityblock metric) also work in a reasonable way for unphased data
+
+    Parameters
+    ----------
+    gts : np.ndarray
+        A 2D numpy array where rows represent genetic sites and columns represent individuals.
+    ploidy : int, optional
+        The number of chromosome copies per individual (default is 1 for haploid).
+    metric: str, optional
+        Metric to be used for sequence comparisons, default cityblock, i.e. counting number of differences
+
+    Returns
+    -------
+    float
+        theta_pi, estimator  of nucleotide diversity.
+    """
+    from math import comb
+    from scipy.spatial.distance import pdist
+
+    individuals = gts.shape[1] * ploidy
+    combination_prefactor = 1 / (comb(individuals, 2))
+
+    pairwise_differences = np.sum(pdist(gts.T, metric=metric))
+
+    theta_pi_value = combination_prefactor * pairwise_differences
+    return theta_pi_value
+
+
+def theta_pi_v2(gts: np.ndarray, ploidy: int = 1) -> float:
+    """
+    Compute theta_pi from a genotype matrix,
+    also following Zeng et al. 2006: Statistical Tests for Detecting Positive Selection by Utilizing High-Frequency Variants
+
+    The function calculates θπ (nucleotide diversity) using a combination of the site frequency
+    spectrum (SFS) and pairwise comparisons between individuals. It normalizes the result by the
+    total number of possible pairwise comparisons, given the ploidy of the individuals.
+    Is probably biased for unphased data.
+
+    Parameters
+    ----------
+    gts : np.ndarray
+        A 2D NumPy array of shape (mutations x samples) where each entry represents the number of
+        mutant alleles (0, 1, or 2, ...) at each site for each individual.
+
+    ploidy : int, optional, default=1
+        The ploidy of the population. For example, ploidy = 2 for diploid organisms and ploidy = 1 for haploid organisms.
+
+    Returns
+    -------
+    float
+        The nucleotide diversity (θπ) for the given genotype matrix, considering the number of pairwise comparisons.
+
+    """
+    from math import comb
+
+    individuals = gts.shape[1] * ploidy
+    xi = return_segsite_occurrence_vector(
+        gts, remove_non_segregating=False, ploidy=ploidy
+    )
+
+    combination_prefactor = 1 / (comb(individuals, 2))
+
+    pi_sum = 0
+    # the first term (all ancestral) is automatically 0, the last term (all derived) we remove from the calculation
+    for ie, entry in enumerate(xi):
+        pi_sum = pi_sum + ie * (individuals - ie) * entry
+
+    theta_pi = pi_sum * combination_prefactor
+
+    return theta_pi
+
+
 def theta_pi_maladapt(gts: np.ndarray, ploidy: int = 1) -> float:
     """
     Calculates theta_pi from genotype data as in MaLAdapt.
@@ -770,50 +848,6 @@ def theta_pi_maladapt(gts: np.ndarray, ploidy: int = 1) -> float:
     theta_pi_value = pi * individuals / (individuals - 1)
 
     return theta_pi_value
-
-
-def theta_pi(gts: np.ndarray, ploidy: int = 1) -> float:
-    """
-    Compute theta_pi from a genotype matrix,
-    following Zeng et al. 2006: Statistical Tests for Detecting Positive Selection by Utilizing High-Frequency Variants
-
-    The function calculates θπ (nucleotide diversity) using a combination of the site frequency
-    spectrum (SFS) and pairwise comparisons between individuals. It normalizes the result by the
-    total number of possible pairwise comparisons, given the ploidy of the individuals.
-    Should in principle also work for unphased data.
-
-    Parameters
-    ----------
-    gts : np.ndarray
-        A 2D NumPy array of shape (mutations x samples) where each entry represents the number of
-        mutant alleles (0, 1, or 2, ...) at each site for each individual.
-
-    ploidy : int, optional, default=1
-        The ploidy of the population. For example, ploidy = 2 for diploid organisms and ploidy = 1 for haploid organisms.
-
-    Returns
-    -------
-    float
-        The nucleotide diversity (θπ) for the given genotype matrix, considering the number of pairwise comparisons.
-
-    """
-    from math import comb
-
-    individuals = gts.shape[1] * ploidy
-    xi = return_segsite_occurrence_vector(
-        gts, remove_non_segregating=False, ploidy=ploidy
-    )
-
-    combination_prefactor = 1 / (comb(individuals, 2))
-
-    pi_sum = 0
-    # the first term (all ancestral) is automatically 0, the last term (all derived) we remove from the calculation
-    for ie, entry in enumerate(xi[:-1]):
-        pi_sum = pi_sum + ie * (individuals - ie) * entry
-
-    theta_pi = pi_sum * combination_prefactor
-
-    return theta_pi
 
 
 def compute_Fay_Wu_theta_h(gts: np.ndarray, ploidy: int = 1) -> float:
@@ -1290,7 +1324,7 @@ def compute_LD_D_maladapt(
     ploidy: int = 1,
     compute_r: bool = True,
     maladapt_correction: bool = True,
-) -> Union[tuple[np.ndarray, np.ndarray], np.ndarray]: 
+) -> Union[tuple[np.ndarray, np.ndarray], np.ndarray]:
     """
     Computes the linkage disequilibrium coefficient D and optionally the correlation coefficient r for pairs of SNPs,
     with an option to apply maladaptation correction.
@@ -1388,7 +1422,9 @@ def compute_LD_D_maladapt(
         return ld_matrix
 
 
-def Kellys_Zns(gts: np.ndarray, params_LD = {"filter_unique": True, "maladapt_correction": False}) -> float:
+def Kellys_Zns(
+    gts: np.ndarray, params_LD={"filter_unique": True, "maladapt_correction": False}
+) -> float:
     """
     Computes the Zns metric, which quantifies the overall strength of
     linkage disequilibrium (LD) across SNPs using pairwise correlation
@@ -1409,9 +1445,7 @@ def Kellys_Zns(gts: np.ndarray, params_LD = {"filter_unique": True, "maladapt_co
         The Zns value
 
     """
-    ld_matrix, r_matrix = compute_LD_D(
-        gts, compute_r=True, **params_LD
-    )
+    ld_matrix, r_matrix = compute_LD_D(gts, compute_r=True, **params_LD)
 
     S = r_matrix.shape[0]
 
