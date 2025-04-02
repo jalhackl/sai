@@ -23,7 +23,7 @@ from typing import Callable, Any
 
 class GenesicFeature:
     """
-    A unified feature wrapper for registering and computing genomic features
+    A genesic feature wrapper for registering and computing genomic features
     with optional parameter injection.
 
     This class allows feature functions (e.g., calc_u, theta_pi, etc.)
