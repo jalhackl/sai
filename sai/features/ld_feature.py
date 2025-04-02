@@ -234,7 +234,9 @@ def compute_ld_burrows(
     """
 
     if ploidy != 2:
-        print("Warning! This function for estimating LD is intended for diploid unphased data (encoded as 0,1,2)!")
+        print(
+            "Warning! This function for estimating LD is intended for diploid unphased data (encoded as 0,1,2)!"
+        )
 
     num_snps, num_individuals = gts.shape
 

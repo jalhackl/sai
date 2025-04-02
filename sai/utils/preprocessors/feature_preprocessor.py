@@ -20,7 +20,7 @@
 
 import numpy as np
 from typing import Any
-from sai.stats.features import calc_u, calc_q
+from sai.features.features import calc_u, calc_q
 from sai.utils.preprocessors import DataPreprocessor
 
 

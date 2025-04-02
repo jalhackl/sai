@@ -21,23 +21,23 @@
 import pytest
 import numpy as np
 from typing import Union
-from sai.stats.features import calc_u
-from sai.stats.features import calc_q
-from sai.stats.features import calc_freq
-from sai.stats.features import compute_matching_loci
+from sai.features.features import calc_u
+from sai.features.features import calc_q
+from sai.features.features import calc_freq
+from sai.features.features import compute_matching_loci
 
 # MaLAdapt features
-from sai.stats.features import heterozygosity
-from sai.stats.features import num_segregating_sites
-from sai.stats.features import compute_ABBA_BABA_D
-from sai.stats.features import theta_W
-from sai.stats.features import compute_fd
-from sai.stats.features import theta_pi
-from sai.stats.features import compute_LD_D
-from sai.stats.features import Kellys_Zns
+from sai.features.features import heterozygosity
+from sai.features.features import num_segregating_sites
+from sai.features.features import compute_ABBA_BABA_D
+from sai.features.features import theta_W
+from sai.features.features import compute_fd
+from sai.features.features import theta_pi
+from sai.features.features import compute_LD_D
+from sai.features.features import Kellys_Zns
 
 # additional features
-from sai.stats.features import compute_D_plus
+from sai.features.features import compute_D_plus
 
 
 def test_calc_u_basic():

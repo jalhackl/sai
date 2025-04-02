@@ -16,3 +16,7 @@
 # along with this program. If not, please see
 #
 #    https://www.gnu.org/licenses/gpl-3.0.en.html
+
+
+from .genesic_feature import GenesicFeature
+from .feature_utils import *
