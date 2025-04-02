@@ -280,29 +280,3 @@ def calc_q(
 
     # Calculate and return the specified quantile of the filtered `tgt_gts` frequencies
     return threshold, loci_positions
-
-
-def heterozygosity(tgt_gts: np.ndarray, ploidy: int = 1) -> float:
-    """
-    Computes the expected heterozygosity (H) for a given genotype matrix.
-
-    Expected heterozygosity is calculated as:
-        H = mean(2 * p * (1 - p)),
-    where p is the allele frequency at each locus.
-
-    Parameters
-    ----------
-    tgt_gts : np.ndarray
-        A 2D numpy array where each row represents a locus and each column represents an individual.
-    ploidy : int, optional
-        The ploidy level of the organism (default is 1).
-
-    Returns
-    -------
-    float
-        The mean expected heterozygosity across all loci.
-    """
-    gts_freq = calc_freq(tgt_gts, ploidy=ploidy)
-    hetvec = 2 * gts_freq * (1.0 - gts_freq)
-    Het = np.mean(hetvec)
-    return Het
