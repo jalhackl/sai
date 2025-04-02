@@ -18,7 +18,9 @@
 #    https://www.gnu.org/licenses/gpl-3.0.en.html
 
 
+import numpy as np
 from sai.features.feature_utils import calc_freq
+from sai.registries.feature_registry import FEATURE_REGISTRY
 
 
 @FEATURE_REGISTRY.register("U")

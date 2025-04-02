@@ -20,3 +20,4 @@
 
 from .genesic_feature import GenesicFeature
 from .feature_utils import *
+from .ai_feature import *
