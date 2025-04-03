@@ -44,7 +44,7 @@ class GenesicFeature:
         self, name: str, func: Callable[..., Any], params: dict[str, Any] = None
     ):
         """
-        Initializes a GenesicFeature object.
+        Initializes a GenesicFeature instance.
 
         Parameters
         ----------

@@ -24,39 +24,35 @@ from sai.registries.feature_registry import FEATURE_REGISTRY
 
 
 @FEATURE_REGISTRY.register("n-ton")
-def calc_n_ton(gt: np.ndarray, is_phased: bool, ploidy: int) -> np.ndarray:
+def calc_n_ton(gt: np.ndarray, ploidy: int = 1) -> np.ndarray:
     """
-    Calculates individual frequency spectra for each sample in the genotype matrix.
+    Calculates per-sample frequency spectra based on observed values
+    across genomic sites.
 
-    For each sample (or haplotype), this function computes how many mutations
-    appear at a given frequency across all loci. If the data is phased, it is
-    treated as haploid (ploidy = 1). The output is a 2D array where each row
-    corresponds to a sample, and each column counts the number of sites where
-    the sample carries i derived alleles.
+    For each sample, the function counts how many times the sample
+    is involved in a site with total allele count equal to k.
+    Sites where the sample has 0 are ignored for that sample.
 
     Parameters
     ----------
     gt : np.ndarray
-        A 2D genotype matrix of shape (num_sites, num_samples), where entries
-        represent the number of derived alleles per individual per site.
-    is_phased : bool
-        Whether the genotype data is phased. If True, the data is treated as haploid.
-    ploidy : int
-        Ploidy level of the genome. Ignored if `is_phased` is True.
+        Genotype matrix of shape (num_sites, num_samples).
+        Values are assumed to be integer counts; allele coding is not assumed.
+    ploidy : int, optional
+        Ploidy level of the genome. Set to 1 for phased data; >1 for unphased data. Default: 1.
 
     Returns
     -------
     np.ndarray
-        A 2D array of shape (num_samples, max_derived_count + 1) where entry (i, j)
-        is the number of loci where sample i carries exactly j derived alleles.
-        The first column (j=0) is zeroed out to ignore non-segregating sites.
-    """
-    if is_phased:
-        ploidy = 1
+        A 2D array of shape (num_samples, K), where each row is the frequency
+        spectrum for a sample, and entry [i, k] counts the number of sites
+        where sample i is nonzero and the total site count equals k.
 
+        The first column (index 0) is zeroed out to ignore sites where the sample
+        had no contribution.
+    """
     mut_num, sample_num = gt.shape
-    iv = np.ones((sample_num, 1))
-    counts = (gt > 0) * np.matmul(gt, iv)
+    counts = (gt > 0) * gt.sum(axis=1, keepdims=True)
 
     spectra = np.array(
         [
