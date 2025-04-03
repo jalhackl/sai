@@ -24,6 +24,7 @@ from sai.features.abba_baba_feature import _calc_four_pops_freq
 from sai.features.abba_baba_feature import _calc_pattern_sum
 from sai.features.abba_baba_feature import calc_d
 from sai.features.abba_baba_feature import calc_fd
+from sai.features.abba_baba_feature import calc_fhom
 from sai.features.abba_baba_feature import calc_d_plus
 from sai.features.abba_baba_feature import calc_d_anc
 
@@ -219,7 +220,19 @@ def test_calc_fd():
     # Call the function with the test input
     result = calc_fd(ref_gts, tgt_gts, src_gts, out_gts)
 
-    # use_hom = True
+    # Check the result
+    expected_result = 0
+    assert np.isclose(
+        result, expected_result
+    ), f"Expected {expected_result}, but got {result}"
+
+
+def test_calc_fhom():
+    ref_gts = np.array([[0, 1], [1, 0], [0, 1]])  # Reference population
+    tgt_gts = np.array([[1, 0], [0, 1], [1, 0]])  # Target population
+    src_gts = np.array([[1, 1], [1, 1], [1, 1]])  # Source population
+    out_gts = None  # No outgroup provided
+
     # dnr_freq = tgt_freq = [0.5, 0.5, 0.5]
     # pattern: 'abba'
     # site 0: (1-0.5)*0.5*0.5*(1-0) = 0.125
@@ -235,15 +248,9 @@ def test_calc_fd():
 
     # abba_d - baba_d = 0
 
-    result_hom = calc_fd(ref_gts, tgt_gts, src_gts, out_gts, use_hom=True)
+    result = calc_fhom(ref_gts, tgt_gts, src_gts, out_gts)
 
-    # Check the result
-    expected_result = 0
-    assert np.isclose(
-        result, expected_result
-    ), f"Expected {expected_result}, but got {result}"
-
-    assert np.isnan(result_hom), "Result should be NaN"
+    assert np.isnan(result), "Result should be NaN"
 
 
 def test_calc_d_plus():

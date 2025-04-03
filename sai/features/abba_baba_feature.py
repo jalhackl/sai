@@ -19,7 +19,7 @@
 
 
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from sai.features.feature_utils import calc_freq
 from sai.registries.feature_registry import FEATURE_REGISTRY
 
@@ -70,9 +70,8 @@ def calc_fd(
     ref_gts: np.ndarray,
     tgt_gts: np.ndarray,
     src_gts: np.ndarray,
-    out_gts: np.ndarray = None,
+    out_gts: Optional[np.ndarray] = None,
     ploidy: int = 1,
-    use_hom: bool = False,
 ) -> float:
     """
     Calculates fd statistic for detecting admixture between populations (Martin et al. 2015).
@@ -90,8 +89,6 @@ def calc_fd(
         If not provided, it is assumed that the ancestral allel is always present in the outgroup, and thus the frequency of the derived allel (p4_freq) is 0.
     ploidy : int, optional
         Ploidy level of the genome. Default: 1 (phased data).
-    use_hom: boolean, optional
-        If True, compute fhom instead of fd (Martin 2015, p.254). Default: False.
 
     Returns
     -------
@@ -105,7 +102,52 @@ def calc_fd(
     abba_n = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abba")
     baba_n = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baba")
 
-    dnr_freq = tgt_freq if use_hom else np.maximum(tgt_freq, src_freq)
+    dnr_freq = np.maximum(tgt_freq, src_freq)
+
+    abba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "abba")
+    baba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "baba")
+
+    return (abba_n - baba_n) / (abba_d - baba_d) if abba_d - baba_d != 0 else np.nan
+
+
+@FEATURE_REGISTRY.register("fhom")
+def calc_fhom(
+    ref_gts: np.ndarray,
+    tgt_gts: np.ndarray,
+    src_gts: np.ndarray,
+    out_gts: Optional[np.ndarray] = None,
+    ploidy: int = 1,
+) -> float:
+    """
+    Calculates fhom statistic for detecting admixture between populations (Martin et al. 2015).
+
+    Parameters
+    ----------
+    ref_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 1 (reference / sister group).
+    tgt_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 2 (target / recipient group).
+    src_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 3 (source / donor group).
+    out_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 4 (outgroup).
+        If not provided, it is assumed that the ancestral allel is always present in the outgroup, and thus the frequency of the derived allel (p4_freq) is 0.
+    ploidy : int, optional
+        Ploidy level of the genome. Default: 1 (phased data).
+
+    Returns
+    -------
+    float
+        The fhom statistic.
+    """
+    ref_freq, tgt_freq, src_freq, out_freq = _calc_four_pops_freq(
+        ref_gts, tgt_gts, src_gts, out_gts, ploidy
+    )
+
+    abba_n = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abba")
+    baba_n = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baba")
+
+    dnr_freq = tgt_freq
 
     abba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "abba")
     baba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "baba")
@@ -118,7 +160,7 @@ def calc_d_plus(
     ref_gts: np.ndarray,
     tgt_gts: np.ndarray,
     src_gts: np.ndarray,
-    out_gts: np.ndarray = None,
+    out_gts: Optional[np.ndarray] = None,
     ploidy: int = 1,
 ) -> float:
     """
@@ -165,7 +207,7 @@ def calc_d_anc(
     ref_gts: np.ndarray,
     tgt_gts: np.ndarray,
     src_gts: np.ndarray,
-    out_gts: np.ndarray = None,
+    out_gts: Optional[np.ndarray] = None,
     ploidy: int = 1,
 ) -> float:
     """
@@ -207,7 +249,7 @@ def _calc_four_pops_freq(
     ref_gts: np.ndarray,
     tgt_gts: np.ndarray,
     src_gts: np.ndarray,
-    out_gts: Optional[np.ndarray],
+    out_gts: Union[np.ndarray, None],
     ploidy: int = 1,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
