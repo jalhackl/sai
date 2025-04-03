@@ -33,7 +33,7 @@ def calc_d(
     ploidy: int = 1,
 ) -> float:
     """
-    Computes Patterson's D-statistic (ABBA-BABA statistic) for detecting admixture between populations.
+    Calculates Patterson's D-statistic (ABBA-BABA statistic) for detecting admixture between populations.
 
     Parameters
     ----------
@@ -75,7 +75,7 @@ def calc_fd(
     use_hom: bool = False,
 ) -> float:
     """
-    Computes fd-statistic for detecting admixture between populations (Martin 2015).
+    Calculates fd-statistic for detecting admixture between populations (Martin et al. 2015).
 
     Parameters
     ----------
@@ -118,34 +118,37 @@ def calc_fd(
 
 @FEATURE_REGISTRY.register("D+")
 def calc_d_plus(
-    src_gts: np.ndarray,
     ref_gts: np.ndarray,
     tgt_gts: np.ndarray,
+    src_gts: np.ndarray,
     out_gts: np.ndarray = None,
     ploidy: int = 1,
-    compute_D_ancestral: bool = False,
+    calc_d_ancestral: bool = False,
 ) -> float:
     """
-    Computes the D+-statistic for detecting admixture between populations (Lopez-Fang 2024).
+    Calculates the D+-statistic for detecting admixture between populations (Fang et al. 2024).
 
     Parameters
     ----------
-    src_gts : np.ndarray
-        A 2D numpy array representing haplotypes of population 1 (source).
     ref_gts : np.ndarray
-        A 2D numpy array representing haplotypes of population 2 (reference / sister group).
+        A 2D numpy array representing genotypes of population 1 (reference / sister group).
     tgt_gts : np.ndarray
-        A 2D numpy array representing haplotypes of population 3 (target).
-    out_gts : np.ndarray
-        A 2D numpy array representing haplotypes of population 4 (outgroup).
+        A 2D numpy array representing genotypes of population 2 (target / recipient group).
+    src_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 3 (source / donor group).
+    out_gts : np.ndarray, optional
+        A 2D numpy array representing genotypes of population 4 (outgroup).
         If not provided, it is assumed that the ancestral allel is always present in the outgroup, and thus the frequency of the derived allel (p4_freq) is 0.
-    compute_D_ancestral : bool
-        compute D_ancestral (which basically consists of the D+-terms w/o the standard D-terms, see Lopez-Fang 2024)
+        Default: None,
+    ploidy : int, optional
+        Ploidy level of the genome. Default: 1 (phased data).
+    calc_d_ancestral : bool, optional
+        If True, calculates D-ancestral (which basically consists of the D+-terms w/o the standard D-terms, see Fang et al. 2024)
 
     Returns
     -------
     float
-        The D+-statistic value (Lopez-Fang 2024).
+        The D+-statistic value or the D-ancestral statistic value.
     """
     ref_freq, tgt_freq, src_freq, out_freq = _calc_four_pops_freq(
         ref_gts, tgt_gts, src_gts, out_gts, ploidy
@@ -156,7 +159,7 @@ def calc_d_plus(
     baaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baaa")
     abaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abaa")
 
-    if compute_D_ancestral:
+    if calc_d_ancestral:
         return (baaa - abaa) / (baaa + abaa) if (baaa + abaa) != 0 else np.nan
 
     return (
@@ -238,9 +241,8 @@ def _calc_pattern_sum(
     Raises
     ------
     ValueError
-        If the pattern string is not exactly four characters long.
-    ValueError
-        If the pattern contains characters other than 'a' or 'b'.
+        - If the pattern string is not exactly four characters long.
+        - If the pattern contains characters other than 'a' or 'b'.
     """
     if len(pattern) != 4:
         raise ValueError("Pattern must be a four-character string.")

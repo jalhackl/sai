@@ -249,16 +249,59 @@ def test_calc_fd():
 
 def test_calc_d_plus():
     # test input
-    src_gts = np.array([[0, 0], [0, 0], [1, 1]])  # Source population
-    ref_gts = np.array([[1, 0], [0, 1], [0, 1]])  # Reference population
-    tgt_gts = np.array([[0, 1], [1, 0], [1, 0]])  # Target population
+    ref_gts = np.array([[0, 0], [0, 0], [1, 1]])  # Referece population
+    tgt_gts = np.array([[1, 0], [0, 1], [0, 1]])  # Taget population
+    src_gts = np.array([[0, 1], [1, 0], [1, 0]])  # Source population
     out_gts = None  # No outgroup provided
 
+    # ref_freq = [0, 0, 1]
+    # tgt_freq = [0.5, 0.5, 0.5]
+    # src_freq = [0.5, 0.5, 0.5]
+    # out_freq = [0, 0, 0]
+
+    # pattern: 'abba'
+    # site 0: (1-0)*0.5*0.5*(1-0) = 0.25
+    # site 1: (1-0)*0.5*0.5*(1-0) = 0.25
+    # site 2: (1-1)*0.5*0.5*(1-0) = 0
+    # sum = 0.5
+
+    # pattern: 'baba'
+    # site 0: 0*(1-0.5)*0.5*(1-0) = 0
+    # site 1: 0*(1-0.5)*0.5*(1-0) = 0
+    # site 2: 1*(1-0.5)*0.5*(1-0) = 0.25
+    # sum = 0.25
+
+    # pattern: 'baaa'
+    # site 0: 0*(1-0.5)*(1-0.5)*(1-0) = 0
+    # site 1: 0*(1-0.5)*(1-0.5)*(1-0) = 0
+    # site 2: 1*(1-0.5)*(1-0.5)*(1-0) = 0.25
+    # sum = 0.25
+
+    # pattern: 'abaa'
+    # site 0: (1-0)*0.5*(1-0.5)*(1-0) = 0.25
+    # site 1: (1-0)*0.5*(1-0.5)*(1-0) = 0.25
+    # site 2: (1-1)*0.5*(1-0.5)*(1-0) = 0
+    # sume = 0.5
+
+    # abba - baba + baaa - abaa = 0.5 - 0.25 + 0.25 - 0.5 = 0
+    # abba + baba + baaa + abaa = 0.5 + 0.25 + 0.25 + 0.5 = 1.5
+
+    # D-ancestral
+    # baaa - abaa = 0.25 - 0.5 = -0.25
+    # baaa + abaa = 0.25 + 0.5 = 0.75
+    # (baaa - abaa) / (baaa + abaa) = -1/3
+
     # Call the function with the test input
-    result = calc_d_plus(src_gts, ref_gts, tgt_gts, out_gts)
+    result = calc_d_plus(ref_gts, tgt_gts, src_gts, out_gts)
+    result_ancestral = calc_d_plus(ref_gts, tgt_gts, src_gts, out_gts, calc_d_ancestral=True)
 
     # Check the result
     expected_result = 0
     assert np.isclose(
         result, expected_result
     ), f"Expected {expected_result}, but got {result}"
+
+    expected_result_ancestral = -1/3
+    assert np.isclose(
+        result, expected_result
+    ), f"Expected {expected_result_ancestral}, but got {result_ancestral}"
