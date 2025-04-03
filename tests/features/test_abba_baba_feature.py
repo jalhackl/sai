@@ -287,11 +287,6 @@ def test_calc_d_plus():
     # abba - baba + baaa - abaa = 0.5 - 0.25 + 0.25 - 0.5 = 0
     # abba + baba + baaa + abaa = 0.5 + 0.25 + 0.25 + 0.5 = 1.5
 
-    # D ancestral
-    # baaa - abaa = 0.25 - 0.5 = -0.25
-    # baaa + abaa = 0.25 + 0.5 = 0.75
-    # (baaa - abaa) / (baaa + abaa) = -1/3
-
     # Call the function with the test input
     result = calc_d_plus(ref_gts, tgt_gts, src_gts, out_gts)
 
