@@ -88,7 +88,7 @@ def test_calc_n_ton_unphased_diploid():
 
 
 def test_calc_n_ton_zero_input():
-    gt = np.zeros((4, 3))  # no derived alleles
+    gt = np.zeros((4, 3))  # no mutations
     result = calc_n_ton(gt)
     assert result.shape[0] == 3
     assert np.all(result == 0)

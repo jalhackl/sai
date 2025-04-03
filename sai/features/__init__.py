@@ -20,5 +20,6 @@
 
 from .genesic_feature import GenesicFeature
 from .feature_utils import *
+from .abba_feature import *
 from .ai_feature import *
 from .hap_feature import *
