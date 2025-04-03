@@ -18,69 +18,120 @@
 #    https://www.gnu.org/licenses/gpl-3.0.en.html
 
 
-from typing import Callable, Any
+import inspect
+from typing import Any, Callable, Optional
 
 
 class GenesicFeature:
     """
-    A genesic feature wrapper for registering and computing genomic features
-    with optional parameter injection.
+    A genesic wrapper for genomic feature functions to provide unified interface,
+    parameter injection, and flexible input mapping.
 
-    This class allows feature functions (e.g., calc_u, theta_pi, etc.)
-    to be wrapped in a consistent interface, with named identity and
-    predefined parameters, to support configuration-driven computation.
+    This class allows a feature function (e.g., `calc_u`, `calc_dist`, etc.)
+    to be used in a configuration-driven pipeline by explicitly registering
+    the function, its parameters, and input aliases.
 
     Attributes
     ----------
     name : str
-        Feature name.
+        Identifier name of the feature (e.g., 'U50', 'theta_pi').
     func : Callable
-        Feature implementation function.
+        Feature computation function.
     params : dict
-        Default parameters to be passed to the function.
+        Predefined keyword parameters to be passed to the function.
+    alias : dict
+        Optional mapping from function parameter names to keys in the input dictionary.
+
+    Examples
+    --------
+    >>> def calc_dist(gt1, gt2):
+    ...     from scipy.spatial import distance_matrix
+    ...     d = distance_matrix(gt2.T, gt1.T)
+    ...     d.sort(axis=1)
+    ...     return d
+
+    >>> feature = GenesicFeature(
+    ...     name="dist_ref_vs_tgt",
+    ...     func=calc_dist,
+    ...     alias={"gt1": "ref_gts", "gt2": "tgt_gts"}
+    ... )
+
+    >>> inputs = {"ref_gts": A, "tgt_gts": B}
+    >>> result = feature.compute(**inputs)
+
+    >>> def calc_u(ref_gts, tgt_gts, src_gts_list, pos, w, x, y_list):
+    ...     return f"U with w={w}, x={x}, y={y_list}"
+
+    >>> feature = GenesicFeature(
+    ...     name="U50",
+    ...     func=calc_u,
+    ...     params={"w": 0.2, "x": 0.5, "y_list": [0.8]}
+    ... )
+
+    >>> inputs = {
+    ...     "ref_gts": "REF",
+    ...     "tgt_gts": "TGT",
+    ...     "src_gts_list": ["SRC1", "SRC2"],
+    ...     "pos": [1, 2, 3]
+    ... }
+
+    >>> feature.compute(**inputs)
+    'U with w=0.2, x=0.5, y=[0.8]'
     """
 
     def __init__(
-        self, name: str, func: Callable[..., Any], params: dict[str, Any] = None
+        self,
+        name: str,
+        func: Callable[..., Any],
+        params: Optional[dict[str, Any]] = None,
+        alias: Optional[dict[str, str]] = None,
     ):
         """
-        Initializes a GenesicFeature instance.
+        Initialize a GenesicFeature instance.
 
         Parameters
         ----------
         name : str
-            The name of the feature (e.g., "U50", "theta_pi").
-            Used for identification and output labeling.
+            Name of the feature, used as its identifier and output key.
         func : Callable
-            A function that implements the computation logic of the feature.
-            Must accept (*args, **kwargs), with keys in `params` as kwargs.
+            The function implementing the feature. It must accept keyword arguments.
         params : dict, optional
-            A dictionary of parameters to be passed to the feature function.
-            These will be injected as keyword arguments in each compute call.
-            Defaults to an empty dict.
+            Fixed keyword arguments to be passed to the function at every invocation.
+            These are typically thresholds or quantile settings.
+            Default is an empty dict.
+        alias : dict, optional
+            A mapping from function argument names to input dictionary keys.
+            If not provided, argument names are assumed to match input keys.
+            For example, {"gt1": "ref_gts"} means `gt1=inputs["ref_gts"]`.
+            Default is empty (i.e., use identity).
         """
-        self.name: str = name
-        self.func: Callable[..., Any] = func
-        self.params: dict[str, Any] = params or {}
+        self.name = name
+        self.func = func
+        self.params = params or {}
+        self.alias = alias or {}
 
-    def compute(self, *args: Any, **kwargs: Any) -> Any:
+    def compute(self, **inputs: Any) -> Any:
         """
-        Executes the wrapped feature function with given inputs.
+        Computes the feature value using mapped inputs and predefined parameters.
 
         Parameters
         ----------
-        *args : Any
-            Positional arguments to be passed to the feature function
-            (e.g., genotype matrices, position arrays, etc.).
-        **kwargs : Any
-            Additional keyword arguments passed at runtime. Will override
-            any keys in `self.params` if duplicated.
+        **inputs : Any
+            All available named inputs (e.g., ref_gts, tgt_gts, etc.).
 
         Returns
         -------
         Any
-            The output of the feature function (e.g., statistic value,
-            site count, frequency vector, etc.).
+            Result of feature function.
         """
-        all_kwargs = {**self.params, **kwargs}
-        return self.func(*args, **all_kwargs)
+        sig = inspect.signature(self.func)
+        needed_keys = sig.parameters.keys()
+
+        # Map inputs using alias if provided, fallback to identity
+        args = {
+            name: inputs[self.alias.get(name, name)]
+            for name in needed_keys
+            if self.alias.get(name, name) in inputs
+        }
+
+        return self.func(**args, **self.params)
