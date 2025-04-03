@@ -155,7 +155,7 @@ def calc_fhom(
     return (abba_n - baba_n) / (abba_d - baba_d) if (abba_d - baba_d) != 0 else np.nan
 
 
-@FEATURE_REGISTRY.register("D+")
+@FEATURE_REGISTRY.register("Dplus")
 def calc_d_plus(
     ref_gts: np.ndarray,
     tgt_gts: np.ndarray,
