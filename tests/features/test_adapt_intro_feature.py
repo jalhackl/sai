@@ -20,10 +20,10 @@
 
 import pytest
 import numpy as np
-from sai.features.ai_feature import calc_u
-from sai.features.ai_feature import calc_q
-from sai.features.ai_feature import calc_rd
-from sai.features.ai_feature import _compute_matching_loci
+from sai.features.adapt_intro_feature import calc_u
+from sai.features.adapt_intro_feature import calc_q
+from sai.features.adapt_intro_feature import calc_rd
+from sai.features.adapt_intro_feature import _compute_matching_loci
 
 
 def test_calc_u_basic():
@@ -246,7 +246,7 @@ def test_calc_q_with_two_sources():
     assert np.array_equal(loci_positions, expected_positions)
 
 
-def test__compute_matching_loci():
+def test_compute_matching_loci():
     # Sample genotype data
     ref_gts = np.array([[0, 1, 0], [1, 1, 0], [0, 0, 1]])
     tgt_gts = np.array([[1, 1, 0], [0, 1, 1], [1, 1, 1]])

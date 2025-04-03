@@ -19,8 +19,48 @@
 
 
 import numpy as np
+from typing import Tuple, Union
 from sai.features.feature_utils import calc_freq
 from sai.registries.feature_registry import FEATURE_REGISTRY
+
+
+def _calc_abba_baba_components(
+    pop1_freq: np.ndarray,
+    pop2_freq: np.ndarray,
+    pop3_freq: np.ndarray,
+    outgroup_freq: Union[np.ndarray, None] = None,
+) -> Tuple[float, float]:
+    """
+    Calculates sum(ABBA - BABA) and sum(ABBA + BABA) across loci.
+
+    Parameters
+    ----------
+    pop1_freq : np.ndarray
+        Allele frequencies for population 1 across loci.
+    pop2_freq : np.ndarray
+        Allele frequencies for population 2 across loci.
+    pop3_freq : np.ndarray
+        Allele frequencies for population 3 across loci.
+    outgroup_freq : np.ndarray or None, optional
+        Allele frequencies for the outgroup across loci.
+        If None, assumed to be zero for all loci.
+
+    Returns
+    -------
+    Tuple[float, float]
+        - The first value is the sum across loci of the difference between ABBA and BABA patterns.
+        - The second value is the sum across loci of ABBA and BABA values.
+    """
+    if outgroup_freq is None:
+        outgroup_freq = np.zeros_like(pop1_freq)
+
+    abba = (1 - pop1_freq) * pop2_freq * pop3_freq * (1 - outgroup_freq)
+    baba = pop1_freq * (1 - pop2_freq) * pop3_freq * (1 - outgroup_freq)
+
+    abba_sum = np.sum(abba)
+    baba_sum = np.sum(baba)
+
+    return abba_sum - baba_sum, abba_sum + baba_sum
 
 
 def S_ABBA_BABA_calc(

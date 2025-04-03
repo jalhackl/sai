@@ -19,9 +19,41 @@
 
 
 import numpy as np
-from sai.features.abba_feature import compute_ABBA_BABA_D
-from sai.features.abba_feature import compute_fd
-from sai.features.abba_feature import compute_D_plus
+from sai.features.abba_baba_feature import _calc_abba_baba_components
+from sai.features.abba_baba_feature import compute_ABBA_BABA_D
+from sai.features.abba_baba_feature import compute_fd
+from sai.features.abba_baba_feature import compute_D_plus
+
+
+def test_calc_abba_baba_components_default_outgroup():
+    pop1 = np.array([0.0, 1.0])
+    pop2 = np.array([1.0, 0.0])
+    pop3 = np.array([1.0, 1.0])
+
+    # abba = (1 - 0.0)*1.0*1.0 + (1 - 1.0)*0.0*1.0 = 1.0 + 0 = 1.0
+    # baba = 0.0*(1 - 1.0)*1.0 + 1.0*(1 - 0.0)*1.0 = 0 + 1.0 = 1.0
+    # sum(abba - baba) = 0.0, sum(abba + baba) = 2.0
+
+    diff, total = _calc_abba_baba_components(pop1, pop2, pop3)
+
+    assert np.isclose(diff, 0.0)
+    assert np.isclose(total, 2.0)
+
+
+def test_calc_abba_baba_components_with_outgroup():
+    pop1 = np.array([0.0, 1.0])
+    pop2 = np.array([1.0, 0.0])
+    pop3 = np.array([1.0, 1.0])
+    outgroup = np.array([1.0, 0.0])
+
+    # Only site 1 contributes:
+    # abba = (1 - 1.0)*0.0*1.0*(1 - 0.0) = 0.0
+    # baba = 1.0*(1 - 0.0)*1.0*(1 - 0.0) = 1.0
+
+    diff, total = _calc_abba_baba_components(pop1, pop2, pop3, outgroup_freq=outgroup)
+
+    assert np.isclose(diff, -1.0)
+    assert np.isclose(total, 1.0)
 
 
 def test_compute_ABBA_BABA_D():
