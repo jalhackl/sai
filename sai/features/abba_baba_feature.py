@@ -107,7 +107,7 @@ def calc_fd(
     abba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "abba")
     baba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "baba")
 
-    return (abba_n - baba_n) / (abba_d - baba_d) if abba_d - baba_d != 0 else np.nan
+    return (abba_n - baba_n) / (abba_d - baba_d) if (abba_d - baba_d) != 0 else np.nan
 
 
 @FEATURE_REGISTRY.register("fhom")
@@ -152,7 +152,7 @@ def calc_fhom(
     abba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "abba")
     baba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "baba")
 
-    return (abba_n - baba_n) / (abba_d - baba_d) if abba_d - baba_d != 0 else np.nan
+    return (abba_n - baba_n) / (abba_d - baba_d) if (abba_d - baba_d) != 0 else np.nan
 
 
 @FEATURE_REGISTRY.register("D+")
@@ -237,8 +237,6 @@ def calc_d_anc(
         ref_gts, tgt_gts, src_gts, out_gts, ploidy
     )
 
-    abba = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abba")
-    baba = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baba")
     baaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baaa")
     abaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abaa")
 
