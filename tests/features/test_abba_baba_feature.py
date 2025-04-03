@@ -151,7 +151,6 @@ def test_invalid_pattern_char():
 
 
 def test_calc_d():
-    # test input
     ref_gts = np.array([[0, 1], [1, 0], [0, 1]])  # Reference population
     tgt_gts = np.array([[1, 0], [0, 1], [1, 0]])  # Target population
     src_gts = np.array([[1, 1], [1, 1], [1, 1]])  # Source population
@@ -189,7 +188,6 @@ def test_calc_d():
 
 
 def test_calc_fd():
-    # test input
     ref_gts = np.array([[0, 1], [1, 0], [0, 1]])  # Reference population
     tgt_gts = np.array([[1, 0], [0, 1], [1, 0]])  # Target population
     src_gts = np.array([[1, 1], [1, 1], [1, 1]])  # Source population
@@ -249,7 +247,6 @@ def test_calc_fd():
 
 
 def test_calc_d_plus():
-    # test input
     ref_gts = np.array([[0, 0], [0, 0], [1, 1]])  # Referece population
     tgt_gts = np.array([[1, 0], [0, 1], [0, 1]])  # Taget population
     src_gts = np.array([[0, 1], [1, 0], [1, 0]])  # Source population
