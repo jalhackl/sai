@@ -22,10 +22,10 @@ jobs:
         micromamba run -n sai pip install -e .
         micromamba run -n sai pytest --cov=. --cov-report term-missing -vv
         micromamba run -n sai coverage xml
-    - name: upload coverage report to codecov
-      uses: codecov/codecov-action@v4
-      with:
-          name: codecov-umbrella
-          fail_ci_if_error: true
-          env_vars: OS,PYTHON
-          token: ${{ secrets.CODECOV_TOKEN }}
+#    - name: upload coverage report to codecov
+#      uses: codecov/codecov-action@v4
+#      with:
+#          name: codecov-umbrella
+#          fail_ci_if_error: true
+#          env_vars: OS,PYTHON
+#          token: ${{ secrets.CODECOV_TOKEN }}

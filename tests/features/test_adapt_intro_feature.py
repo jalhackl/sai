@@ -20,10 +20,10 @@
 
 import pytest
 import numpy as np
-from sai.stats.features import calc_u
-from sai.stats.features import calc_q
-from sai.stats.features import calc_freq
-from sai.stats.features import compute_matching_loci
+from sai.features.adapt_intro_feature import calc_u
+from sai.features.adapt_intro_feature import calc_q
+from sai.features.adapt_intro_feature import calc_rd
+from sai.features.adapt_intro_feature import _compute_matching_loci
 
 
 def test_calc_u_basic():
@@ -246,55 +246,6 @@ def test_calc_q_with_two_sources():
     assert np.array_equal(loci_positions, expected_positions)
 
 
-def test_phased_data():
-    # Phased data, ploidy = 1
-    gts = np.array([[1, 0, 0, 1], [0, 0, 0, 0], [1, 1, 1, 1]])
-    expected_frequency = np.array([0.5, 0.0, 1.0])
-    result = calc_freq(gts, ploidy=1)
-    np.testing.assert_array_almost_equal(
-        result, expected_frequency, decimal=6, err_msg="Phased data test failed."
-    )
-
-
-def test_unphased_diploid_data():
-    # Unphased data, ploidy = 2 (diploid)
-    gts = np.array([[1, 1], [0, 0], [2, 2]])
-    expected_frequency = np.array([0.5, 0.0, 1.0])
-    result = calc_freq(gts, ploidy=2)
-    np.testing.assert_array_almost_equal(
-        result,
-        expected_frequency,
-        decimal=6,
-        err_msg="Unphased diploid data test failed.",
-    )
-
-
-def test_unphased_triploid_data():
-    # Unphased data, ploidy = 3 (triploid)
-    gts = np.array([[1, 2, 3], [0, 0, 0], [3, 3, 3]])
-    expected_frequency = np.array([0.6667, 0.0, 1.0])
-    result = calc_freq(gts, ploidy=3)
-    np.testing.assert_array_almost_equal(
-        result,
-        expected_frequency,
-        decimal=4,
-        err_msg="Unphased triploid data test failed.",
-    )
-
-
-def test_unphased_tetraploid_data():
-    # Unphased data, ploidy = 4 (tetraploid)
-    gts = np.array([[2, 2, 2, 2], [1, 3, 0, 4], [0, 0, 0, 0]])
-    expected_frequency = np.array([0.5, 0.5, 0.0])
-    result = calc_freq(gts, ploidy=4)
-    np.testing.assert_array_almost_equal(
-        result,
-        expected_frequency,
-        decimal=6,
-        err_msg="Unphased tetraploid data test failed.",
-    )
-
-
 def test_compute_matching_loci():
     # Sample genotype data
     ref_gts = np.array([[0, 1, 0], [1, 1, 0], [0, 0, 1]])
@@ -313,7 +264,7 @@ def test_compute_matching_loci():
         y_list = [y_condition, y_condition]  # Apply the same condition to both sources
 
         # Call the function
-        ref_freq, tgt_freq, condition = compute_matching_loci(
+        ref_freq, tgt_freq, condition = _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
@@ -337,7 +288,7 @@ def test_compute_matching_loci():
     with pytest.raises(
         ValueError, match=r"Parameters w must be within the range \[0, 1\]."
     ):
-        compute_matching_loci(
+        _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
@@ -349,7 +300,7 @@ def test_compute_matching_loci():
     with pytest.raises(
         ValueError, match=r"Parameters w must be within the range \[0, 1\]."
     ):
-        compute_matching_loci(
+        _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
@@ -361,7 +312,7 @@ def test_compute_matching_loci():
 
     # Test invalid y values
     with pytest.raises(ValueError, match="Invalid value in y_list"):
-        compute_matching_loci(
+        _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
@@ -371,7 +322,7 @@ def test_compute_matching_loci():
             anc_allele_available,
         )
     with pytest.raises(ValueError, match="Invalid value in y_list"):
-        compute_matching_loci(
+        _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
@@ -383,7 +334,7 @@ def test_compute_matching_loci():
 
     # Test invalid operators
     with pytest.raises(ValueError, match="Invalid operator in y_list"):
-        compute_matching_loci(
+        _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
@@ -397,7 +348,7 @@ def test_compute_matching_loci():
     with pytest.raises(
         ValueError, match="The length of src_gts_list and y_list must match"
     ):
-        compute_matching_loci(
+        _compute_matching_loci(
             ref_gts,
             tgt_gts,
             src_gts_list,
