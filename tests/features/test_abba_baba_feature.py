@@ -25,6 +25,7 @@ from sai.features.abba_baba_feature import _calc_pattern_sum
 from sai.features.abba_baba_feature import calc_d
 from sai.features.abba_baba_feature import calc_fd
 from sai.features.abba_baba_feature import calc_d_plus
+from sai.features.abba_baba_feature import calc_d_anc
 
 
 def test_calc_four_pops_freq_basic():
@@ -199,7 +200,7 @@ def test_calc_fd():
     # src_freq = [1, 1, 1]
     # out_freq = [0, 0, 0]
 
-    # abba_n - baba_n = 0 See test_calc_d()
+    # See test_calc_d() for abba_n, baba_n
 
     # use_hom = False
     # dnr_freq = src_freq = [1, 1, 1]
@@ -286,14 +287,13 @@ def test_calc_d_plus():
     # abba - baba + baaa - abaa = 0.5 - 0.25 + 0.25 - 0.5 = 0
     # abba + baba + baaa + abaa = 0.5 + 0.25 + 0.25 + 0.5 = 1.5
 
-    # D-ancestral
+    # D ancestral
     # baaa - abaa = 0.25 - 0.5 = -0.25
     # baaa + abaa = 0.25 + 0.5 = 0.75
     # (baaa - abaa) / (baaa + abaa) = -1/3
 
     # Call the function with the test input
     result = calc_d_plus(ref_gts, tgt_gts, src_gts, out_gts)
-    result_ancestral = calc_d_plus(ref_gts, tgt_gts, src_gts, out_gts, calc_d_ancestral=True)
 
     # Check the result
     expected_result = 0
@@ -301,7 +301,23 @@ def test_calc_d_plus():
         result, expected_result
     ), f"Expected {expected_result}, but got {result}"
 
-    expected_result_ancestral = -1/3
+
+def test_calc_d_anc():
+    ref_gts = np.array([[0, 0], [0, 0], [1, 1]])  # Referece population
+    tgt_gts = np.array([[1, 0], [0, 1], [0, 1]])  # Taget population
+    src_gts = np.array([[0, 1], [1, 0], [1, 0]])  # Source population
+    out_gts = None  # No outgroup provided
+
+    # See above for abba, baba, baaa, abaa
+
+    # D ancestral
+    # baaa - abaa = 0.25 - 0.5 = -0.25
+    # baaa + abaa = 0.25 + 0.5 = 0.75
+    # (baaa - abaa) / (baaa + abaa) = -1/3
+
+    result = calc_d_anc(ref_gts, tgt_gts, src_gts, out_gts)
+
+    expected_result = -1 / 3
     assert np.isclose(
         result, expected_result
-    ), f"Expected {expected_result_ancestral}, but got {result_ancestral}"
+    ), f"Expected {expected_result}, but got {result}"

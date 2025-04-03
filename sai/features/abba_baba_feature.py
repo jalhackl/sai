@@ -53,7 +53,7 @@ def calc_d(
     Returns
     -------
     float
-        The D-statistic value, indicating the degree of allele sharing bias.
+        The D statistic, indicating the degree of allele sharing bias.
     """
     ref_freq, tgt_freq, src_freq, out_freq = _calc_four_pops_freq(
         ref_gts, tgt_gts, src_gts, out_gts, ploidy
@@ -75,7 +75,7 @@ def calc_fd(
     use_hom: bool = False,
 ) -> float:
     """
-    Calculates fd-statistic for detecting admixture between populations (Martin et al. 2015).
+    Calculates fd statistic for detecting admixture between populations (Martin et al. 2015).
 
     Parameters
     ----------
@@ -96,7 +96,7 @@ def calc_fd(
     Returns
     -------
     float
-        The fd-statistic value.
+        The fd statistic.
     """
     ref_freq, tgt_freq, src_freq, out_freq = _calc_four_pops_freq(
         ref_gts, tgt_gts, src_gts, out_gts, ploidy
@@ -105,10 +105,7 @@ def calc_fd(
     abba_n = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abba")
     baba_n = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baba")
 
-    if not use_hom:
-        dnr_freq = np.maximum(tgt_freq, src_freq)
-    else:
-        dnr_freq = tgt_freq
+    dnr_freq = tgt_freq if use_hom else np.maximum(tgt_freq, src_freq)
 
     abba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "abba")
     baba_d = _calc_pattern_sum(ref_freq, dnr_freq, dnr_freq, out_freq, "baba")
@@ -123,10 +120,9 @@ def calc_d_plus(
     src_gts: np.ndarray,
     out_gts: np.ndarray = None,
     ploidy: int = 1,
-    calc_d_ancestral: bool = False,
 ) -> float:
     """
-    Calculates the D+-statistic for detecting admixture between populations (Fang et al. 2024).
+    Calculates the D+ statistic for detecting admixture between populations (Fang et al. 2024).
 
     Parameters
     ----------
@@ -142,13 +138,11 @@ def calc_d_plus(
         Default: None,
     ploidy : int, optional
         Ploidy level of the genome. Default: 1 (phased data).
-    calc_d_ancestral : bool, optional
-        If True, calculates D-ancestral (which basically consists of the D+-terms w/o the standard D-terms, see Fang et al. 2024)
 
     Returns
     -------
     float
-        The D+-statistic value or the D-ancestral statistic value.
+        The D+ statistic.
     """
     ref_freq, tgt_freq, src_freq, out_freq = _calc_four_pops_freq(
         ref_gts, tgt_gts, src_gts, out_gts, ploidy
@@ -159,14 +153,54 @@ def calc_d_plus(
     baaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baaa")
     abaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abaa")
 
-    if calc_d_ancestral:
-        return (baaa - abaa) / (baaa + abaa) if (baaa + abaa) != 0 else np.nan
-
     return (
         (abba - baba + baaa - abaa) / (abba + baba + baaa + abaa)
         if (abba + baba + baaa + abaa) != 0
         else np.nan
     )
+
+
+@FEATURE_REGISTRY.register("Danc")
+def calc_d_anc(
+    ref_gts: np.ndarray,
+    tgt_gts: np.ndarray,
+    src_gts: np.ndarray,
+    out_gts: np.ndarray = None,
+    ploidy: int = 1,
+) -> float:
+    """
+    Calculates the D ancestral statistic for detecting admixture between populations (Fang et al. 2024).
+
+    Parameters
+    ----------
+    ref_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 1 (reference / sister group).
+    tgt_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 2 (target / recipient group).
+    src_gts : np.ndarray
+        A 2D numpy array representing genotypes of population 3 (source / donor group).
+    out_gts : np.ndarray, optional
+        A 2D numpy array representing genotypes of population 4 (outgroup).
+        If not provided, it is assumed that the ancestral allel is always present in the outgroup, and thus the frequency of the derived allel (p4_freq) is 0.
+        Default: None,
+    ploidy : int, optional
+        Ploidy level of the genome. Default: 1 (phased data).
+
+    Returns
+    -------
+    float
+        The D ancestral statistic.
+    """
+    ref_freq, tgt_freq, src_freq, out_freq = _calc_four_pops_freq(
+        ref_gts, tgt_gts, src_gts, out_gts, ploidy
+    )
+
+    abba = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abba")
+    baba = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baba")
+    baaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "baaa")
+    abaa = _calc_pattern_sum(ref_freq, tgt_freq, src_freq, out_freq, "abaa")
+
+    return (baaa - abaa) / (baaa + abaa) if (baaa + abaa) != 0 else np.nan
 
 
 def _calc_four_pops_freq(
