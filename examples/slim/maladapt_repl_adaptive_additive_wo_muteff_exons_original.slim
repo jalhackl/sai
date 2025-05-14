@@ -1,0 +1,251 @@
+// set up a simple neutral simulation 
+initialize() { 
+
+    if (!exists("output_path")) {
+        defineConstant("output_path", "default_tree_output_maladapt_additive_muteff_exons_repl.trees");
+    }
+    
+    if (!exists("txt_path")) {
+        defineConstant("txt_path", "default_text_output_maladapt_additive_muteff_exons_repl.txt");
+    }
+    
+    if (!exists("adm_amount")) {
+        defineConstant("adm_amount", 0.04);
+    }
+    if (!exists("adm_time")) {
+        defineConstant("adm_time", 8714);
+    }
+    if (!exists("sel_time")) {
+        defineConstant("sel_time", 0);
+    }  
+    if (!exists("seq_length")) {
+        defineConstant("seq_length", 10000000);
+    }
+        
+    print("Relevant parameters: ");
+    print("adm_amount: " + adm_amount);
+    print("adm_time: " + adm_time);
+    print("sel_time: " + sel_time);
+    print("output_path: " + output_path);
+    print("txt_path: " + txt_path);
+    
+
+
+initializeSLiMOptions(keepPedigrees = T);
+
+
+
+initializeMutationRate(1.8e-08*(2.31/3.31)*10); 
+initializeTreeSeq();
+
+// m1 mutation type: nonsyn 
+// muts added at 2.31/3.31 the mutation rate, syn muts added w/msprime 
+initializeMutationType("m1", 0.5, "g", -0.01026*10, 0.186); 
+
+// m2 mutation type: adaptive 
+defineGlobal("adaptsel", runif(1, 0.0001*10,0.01*100));
+//initializeMutationType("m2", 100.5, "e", 100);
+initializeMutationType("m2", 0.5, "s", "return adaptsel;");
+m2.convertToSubstitution = F; 
+
+//genomic element: exon and uses a mixture of syn and nonsyn at a 1:2.31 ratio (Huber et al.) 
+initializeGenomicElementType("g1", c(m1), c(1.0)); // no synonymous muts 
+
+//read in exon and recomb info 
+info_lines = readFile("sim_seq_info_chr3region.txt"); //EPAS1 
+
+//alternatively, we use uniform recombination and a standard genomic element 
+//initializeRecombinationRate(1e-8); 
+//initializeGenomicElement(g1, 0, seq_length-1);
+//recombination 
+
+
+//recombination 
+rec_ends = NULL; 
+rec_rates = NULL; 
+for (line in info_lines[substr(info_lines, 0, 2) == "rec"]) 
+{ 
+components = strsplit(line, " "); 
+rec_ends = c(rec_ends, asInteger(components[1])); 
+rec_rates = c(rec_rates, asFloat(components[2])); 
+} 
+//multiply rec rates by scaling factor 
+initializeRecombinationRate(0.5*(1-(1-2*rec_rates)^10), rec_ends); 
+
+//exons 
+for (line in info_lines[substr(info_lines, 0, 2) == "exo"]) 
+{ 
+components = strsplit(line, " "); 
+exon_starts = asInteger(components[1]); 
+exon_ends = asInteger(components[2]); 
+initializeGenomicElement(g1, exon_starts, exon_ends); 
+} 
+
+
+} 
+
+
+// burn-in for ancestral population 
+1 early() { 
+
+sim.addSubpop("p1", 730); 
+defineGlobal("simID",getSeed());defineGlobal("newsel",getSeed()); 
+print("newsel:");
+print(asFloat(newsel));
+print("adaptsel:");
+print(adaptsel);
+
+sim.tag = simID; 
+
+} 
+
+
+// after burn-in, split off Neanderthals (p2) 
+7300 early() { 
+sim.addSubpopSplit("p2", 100, p1); 
+} 
+
+
+7399 late() { 
+sim.outputFull(txt_path); 
+} 
+
+
+adm_time: (adm_time+sel_time) late() { 
+mut = sim.mutationsOfType(m2); 
+if (size(mut)!=0){ 
+if (mut.selectionCoeff != 0.0) 
+{mut.setSelectionCoeff(0.0);} 
+} 
+
+} 
+
+
+adm_time+sel_time+1 early() { 
+mut = sim.mutationsOfType(m2); 
+if (sim.tag!=simID){ 
+mut.setSelectionCoeff(asFloat(newsel)); 
+} 
+else if (sim.tag==simID) 
+{mut.setSelectionCoeff(asFloat(adaptsel));} 
+} 
+
+7401 late(){ 
+mut = sim.mutationsOfType(m2); 
+if (sim.tag!=simID){ 
+mut.setSelectionCoeff(asFloat(newsel));} 
+sim.outputMutations(sim.mutationsOfType(m2)); 
+} 
+
+
+7400 late(){ 
+target = sample(p2.genomes, 200); //fix it in source pop 
+target.addNewDrawnMutation(m2, 2730973); //random mutation in the middle of the segment 
+
+rm("simID"); 
+defineGlobal("simID",getSeed()); 
+sim.outputMutations(sim.mutationsOfType(m2)); 
+} 
+
+
+
+7400: 8900 late() { 
+
+    muts = sim.mutationsOfType(m2);
+    if (size(muts) != 1) {
+    	  
+    	  print("Finish due to no mutation of type 2");
+    	  print("Finish due to no mutation of type 2, num: " );
+    	  print("Finish due to no mutation of type 2, num: " + (size(muts)));
+        cat("Skipping this run due to unexpected number of m2 mutations: " + string(size(muts)), "\n");
+        //sim.simulationFinished();
+        
+        cat("RESTART \n"); sim.readFromPopulationFile(txt_path); 
+setSeed(getSeed() + 1); //sim.simulationFinished(); 
+rm("simID"); rm("newsel"); 
+defineGlobal("simID",getSeed()); defineGlobal("newsel",runif(1,0.0001*10,0.01*10)); 
+        
+        
+    }
+    else{
+    
+    }
+
+} 
+
+
+// set African population size 
+8340 early() { 
+p1.setSubpopulationSize(1447); 
+} 
+
+// split off Asian-Eur ancestor (p3) 
+8696 early() { 
+sim.addSubpopSplit("p3", 186, p1); 
+p1.setMigrationRates(c(p2, p3), c(0, 0.00015)); 
+p3.setMigrationRates(c(p1, p2), c(0.00015, 0)); 
+} 
+
+// Neanderthal hybridization 
+adm_time late() { 
+sim.treeSeqRememberIndividuals(sim.subpopulations.individuals); 
+sim.addSubpopSplit("p4", 186, p1); 
+p4.setMigrationRates(c(p1,p2,p3), c(0.0, adm_amount, 1-adm_amount)); 
+} 
+
+adm_time+1 late() { 
+p4.setMigrationRates(c(p1,p2,p3), c(0.0, 0.0, 0.0)); 
+
+p3.setSubpopulationSize(0); 
+} 
+
+8741 late(){sim.outputMutations(sim.mutationsOfType(m2)); } 
+
+//Neanderthal sample 
+8748 late() { 
+sim.outputMutations(sim.mutationsOfType(m2)); 
+print(sim.mutationFrequencies(p4, sim.mutationsOfType(m2))); 
+sim.treeSeqRememberIndividuals(sample(p2.individuals, 2)); 
+p2.setSubpopulationSize(0); 
+} 
+
+
+8740 late(){sim.outputMutations(sim.mutationsOfType(m2)); } 
+
+// Asian founder bottleneck 
+8808 early() { 
+p4.setSubpopulationSize(55); 
+p1.setMigrationRates(c(p4), c(7.8e-06)); 
+p4.setMigrationRates(c(p1), c(7.8e-06)); 
+} 
+
+// Asian exponential growth 
+8808:8900 early() { 
+
+newSize = asInteger(round(1.048^(community.tick - 8808) * 55)); 
+p4.setSubpopulationSize(newSize); 
+} 
+
+
+8900 late() { 
+sim.outputMutations(sim.mutationsOfType(m2)); 
+cat("Frequencies: "); 
+print(sim.mutationFrequencies(p4, sim.mutationsOfType(m2))); 
+print(sim.mutationsOfType(m2));
+print(size(sim.mutationsOfType(m2)));
+print("Frequencies of mut2: p1, p4");
+print(sim.mutationFrequencies(p1, sim.mutationsOfType(m2))); 
+//print(sim.mutationFrequencies(p2, sim.mutationsOfType(m2))); 
+//print(sim.mutationFrequencies(p3, sim.mutationsOfType(m2))); 
+print(sim.mutationFrequencies(p4, sim.mutationsOfType(m2))); 
+print("Final output");
+sim.outputMutations(sim.mutationsOfType(m2)); 
+sim.treeSeqOutput(output_path); 
+} 
+
+
+//p1: Ancestral (N=730), later African (N=1447)
+//p2: Neandertal (N=100)
+//p3: Asian-Eur ancestor (N=186, later 0)
+//p4: Modern (N=186, follows directly from p3)
+//Intro from: p2->p3, rest p3->p4
