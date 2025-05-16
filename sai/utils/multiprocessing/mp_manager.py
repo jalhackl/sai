@@ -101,11 +101,12 @@ def terminate_all_workers(workers: list[multiprocessing.Process]) -> None:
 
 
 def mp_manager(
-    data_processor: DataPreprocessor,
+    job: callable,
     data_generator: DataGenerator,
     nprocess: int,
+    post_process: callable = None,
     **kwargs,
-) -> None:
+) -> list:
     """
     Manages the distribution of tasks across multiple processes for parallel execution, ensuring
     reproducibility through controlled seed values for each task.
@@ -113,11 +114,12 @@ def mp_manager(
     This function initializes a pool of worker processes and distributes tasks among them.
     Each task involves executing a specified job, potentially with different seeds for
     each repetition to ensure variability yet reproducibility in stochastic processes.
+    Results or errors are collected and returned as a list.
 
     Parameters
     ----------
-    data_processor : DataPreprocessor
-        An instance of `DataPreprocessor` that prepares data for each task before execution.
+    job : callable
+        The function or callable object to be executed in parallel by each worker.
     data_generator : DataGenerator
         An instance of a `DataGenerator` subclass that yields dictionaries with parameters for each task.
         The `run` method in the corresponding job instance must be compatible with the parameters returned
@@ -126,9 +128,16 @@ def mp_manager(
     nprocess : int
         The number of worker processes to use for executing the job in parallel. This determines
         the pool size of the multiprocessing environment.
+    post_process : callable, optional
+        A function that processes the final batch of results.
     **kwargs : dict
         Additional keyword arguments to be passed directly to the job function. These are
         forwarded as-is to each job invocation.
+
+    Returns
+    -------
+    res : list
+        A list of collected results from each executed job.
 
     Raises
     ------
@@ -142,6 +151,7 @@ def mp_manager(
       for task distribution and worker status monitoring.
     - To ensure smooth termination and cleanup, a monitoring thread is used to join all worker
       processes, and `cleanup_on_sigterm` is called to handle sudden terminations gracefully.
+
     """
     try:
         from pytest_cov.embed import cleanup_on_sigterm
@@ -151,6 +161,7 @@ def mp_manager(
         cleanup_on_sigterm()
 
     with Manager() as manager:
+        res = []
         in_queue, out_queue = manager.Queue(), manager.Queue()
         shared_dict = manager.dict()
         workers = [
@@ -161,7 +172,7 @@ def mp_manager(
         ]
 
         for params in data_generator.get():
-            in_queue.put((data_processor, params))
+            in_queue.put((job, params))
 
         try:
             for w in workers:
@@ -170,19 +181,18 @@ def mp_manager(
             monitor_thread = Thread(target=monitor, args=(shared_dict, workers))
             monitor_thread.start()
 
-            results = []
-
             for i in range(len(data_generator)):
                 items = out_queue.get()
                 if items is None:
                     continue
                 if isinstance(items, tuple) and "error" in items:
+                    res = "error"
                     break
 
-                results.extend(items)
+                res.append(items)
 
-            if results:
-                data_processor.process_items(results)
+            if post_process:
+                post_process(res, **kwargs)
 
             for w in workers:
                 w.join()
@@ -190,6 +200,8 @@ def mp_manager(
             for w in workers:
                 w.terminate()
             monitor_thread.join()
+
+    return res
 
 
 def mp_worker(

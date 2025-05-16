@@ -24,6 +24,7 @@ import pandas as pd
 from typing import Optional, Union
 from natsort import natsorted
 from sai.utils.genomic_dataclasses import ChromosomeData
+import os
 
 
 def parse_ind_file(filename: str) -> dict[str, list[str]]:
@@ -120,6 +121,7 @@ def read_geno_data(
             region = f"{chr_name}"
         else:
             region = f"{chr_name}:{start}-{end}"
+
         vcf_data = allel.read_vcf(
             vcf,
             fields=[
@@ -137,6 +139,7 @@ def read_geno_data(
         )
     except Exception as e:
         raise ValueError(f"Failed to read VCF file {vcf} from {region}: {e}") from e
+    
 
     # Convert genotype data to a more efficient GenotypeArray
     if vcf_data is None:
@@ -298,6 +301,7 @@ def read_data(
     This organization allows easy access and manipulation of genotype data by category and chromosome,
     enabling flexible processing across different populations and chromosomal regions.
     """
+
     ref_data = ref_samples = tgt_data = tgt_samples = src_data = src_samples = None
 
     # Parse sample information
@@ -319,6 +323,7 @@ def read_data(
     if src_samples:
         all_samples.update(src_samples)
 
+
     try:
         # Read VCF data
         geno_data, all_samples, ploidy = read_geno_data(
@@ -332,6 +337,7 @@ def read_data(
         )
     except Exception as e:
         raise ValueError(f"Failed to read VCF data: {e}")
+    
 
     if geno_data is None:
         return None, ref_samples, None, tgt_samples, None, src_samples, None
@@ -603,11 +609,11 @@ def flip_snps(data: dict[str, ChromosomeData], flipped_snps: list[int]) -> None:
     # Flip all genotypes at once where the mask is True
     data.GT[is_flipped] = allel.GenotypeArray(abs(data.GT[is_flipped] - 1))
 
-
 def split_genome(
     pos: np.ndarray,
     window_size: int,
     step_size: int,
+    start: int = None,
 ) -> list[tuple]:
     """
     Creates sliding windows along the genome based on variant positions.
@@ -620,6 +626,9 @@ def split_genome(
         Length of each sliding window.
     step_size : int
         Step size of the sliding windows.
+    start: int, optional
+        Minimum starting coordinate for the first window. The first window will start
+        no smaller than this value. Default is None.
 
     Returns
     -------
@@ -644,7 +653,9 @@ def split_genome(
 
     window_positions = []
     win_start = (pos[0] + step_size) // step_size * step_size - window_size + 1
-    win_start = max(win_start, 1)
+    if start is None:
+        start = 1
+    win_start = max(win_start, start)
 
     # Create windows based on step size and window size
     while win_start <= pos[-1]:
@@ -687,3 +698,40 @@ def natsorted_df(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     return df.loc[sorted_indices].reset_index(drop=True)
+
+
+def collect_files(file_location: str, file_ending: str) -> list:
+    """
+    Collects all files with the given file extension from a single file or a directory.
+
+    Parameters
+    ----------
+    file_location : str
+        The path to a single file or a directory.
+    file_ending : str
+        The file extension to filter by (e.g., ".vcf").
+
+    Returns
+    -------
+    list of str
+        A list of file paths matching the given file extension.
+
+    Raises
+    ------
+    SystemExit
+        If the path is neither a file nor a directory.
+    """
+    file_list = []
+
+    if os.path.isfile(file_location):
+        if file_location.endswith(file_ending):
+            file_list.append(file_location)
+    elif os.path.isdir(file_location):
+        for root, _, files in os.walk(file_location):
+            for file in files:
+                if file.endswith(file_ending):
+                    file_list.append(os.path.join(root, file))
+    else:
+        raise SystemExit(f"Error: '{file_location}' is neither a file nor a directory.")
+
+    return file_list

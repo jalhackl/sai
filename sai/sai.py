@@ -26,6 +26,102 @@ from matplotlib.ticker import MaxNLocator
 from sai.utils.generators import ChunkGenerator
 from sai.utils.preprocessors import ChunkPreprocessor
 from sai.utils.utils import natsorted_df
+from sai.utils.preprocessors import SaiChunkPreprocessor
+
+from sai.stats.features import *
+
+def stat(
+    vcf_file: str,
+    chr_name: str,
+    ref_ind_file: str,
+    tgt_ind_file: str,
+    src_ind_file: str,
+    win_len: int,
+    win_step: int,
+    num_src: int,
+    anc_allele_file: str,
+    output_file: str,
+    feature_config: str,
+    num_workers: int,
+    ploidy: int = 2,
+    is_phased: bool = True
+) -> None:
+    """
+    Processes and scores genomic data by generating windowed data and feature vectors.
+
+    Parameters
+    ----------
+    vcf_file : str
+        Path to the VCF file containing variant data.
+    chr_name : str
+        The chromosome name to be analyzed from the VCF file.
+    ref_ind_file : str
+        Path to the file containing reference population identifiers.
+    tgt_ind_file : str
+        Path to the file containing target population identifiers.
+    src_ind_file : str
+        Path to the file containing source population identifiers.
+    win_len : int
+        Length of each genomic window in base pairs.
+    win_step : int
+        Step size in base pairs between consecutive windows.
+    num_src : int
+        Number of source populations to include in each windowed analysis.
+    anc_allele_file : str
+        Path to the file containing ancestral allele information.
+    w : float
+        Frequency threshold for calculating feature vectors.
+    x : float
+        Another frequency threshold for calculating feature vectors.
+    y : list[float]
+        List of frequency thresholds used for various calculations in feature vector processing.
+    output_file : str
+        File path to save the output of processed feature vectors.
+    stat_type: str
+        Specifies the type of statistic to compute.
+    num_workers : int
+        Number of parallel processes for multiprocessing.
+    """
+    generator = ChunkGenerator(
+        vcf_file=vcf_file,
+        chr_name=chr_name,
+        window_size=win_len,
+        step_size=win_step,
+        num_chunks=num_workers * 8,
+    )
+
+    preprocessor = SaiChunkPreprocessor(
+        vcf_file=vcf_file,
+        ref_ind_file=ref_ind_file,
+        tgt_ind_file=tgt_ind_file,
+        src_ind_file=src_ind_file,
+        win_len=win_len,
+        win_step=win_step,
+        output_file=output_file,
+        feature_config=feature_config,
+        anc_allele_file=anc_allele_file,
+        num_src=num_src,
+        # also provide ploidy and is_phased information
+        ploidy=ploidy,
+        is_phased=is_phased
+    )
+
+    #header = f"Chrom\tStart\tEnd\tRef\tTgt\tSrc\tN(Variants)\t{stat_type}\tCandidate\n"
+
+    directory = os.path.dirname(output_file)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    #with open(output_file, "w") as f:
+    #    f.write(header)
+
+    items = []
+
+    for params in generator.get():
+        items.extend(preprocessor.run(**params))
+
+
+    my_items = items
+    return my_items
 
 
 def score(

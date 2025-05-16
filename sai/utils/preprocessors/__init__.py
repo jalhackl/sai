@@ -21,3 +21,16 @@
 from .data_preprocessor import DataPreprocessor
 from .chunk_preprocessor import ChunkPreprocessor
 from .feature_preprocessor import FeaturePreprocessor
+
+
+from .DataPreprocessor import DataPreprocessor
+from .FeatureVectorsPreprocessor import FeatureVectorsPreprocessor
+
+from .GenotypeMatricesPreprocessor import GenotypeMatricesPreprocessor
+
+from .Saichunk_preprocessor import SaiChunkPreprocessor
+from .saifeature_preprocessor import SaiFeaturePreprocessor
+
+from .SaiLRPreprocessor import SaiLRPreprocessor
+from .SaiFeatureVectorsPreprocessor import SaiFeatureVectorsPreprocessor
+
