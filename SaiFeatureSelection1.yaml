@@ -1,0 +1,6 @@
+Features:
+    theta_pi_v2: true
+    compute_D_plus: 
+        compute_D_ancestral: false
+    H2_value: true
+    H1_H12_values: true

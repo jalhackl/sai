@@ -1,0 +1,23 @@
+Features:
+    theta_pi_v2: true
+    compute_D_plus: 
+        compute_D_ancestral: false
+    H2_value: true
+    H1_H12_values: true
+    tajimas_d: true
+    Kellys_Zns: true
+    compute_Fay_Wu_theta_h: true
+    theta_W: true
+    compute_fd: true
+    compute_ABBA_BABA_D: true
+    heterozygosity: true
+    calc_rd: true
+    calc_q:
+        w: 0.01
+        y_list: [["=", 1.0]]
+    calc_u: 
+        w: 0.01
+        x: 0.50
+        y_list: [["=", 1.0]]
+    
+    
