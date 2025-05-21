@@ -7,7 +7,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 class CalculatorTheoreticalSCCT:
     """
-    Calculator for the theoretical SCCT (Single Coalescent Component Test) ratio based on
+    Calculator for the theoretical SCCT (selection by conditional coalescent tree) ratio based on
     coalescent theory branch length expectations.
 
     This is a Python version of the Java implementation from:
@@ -537,14 +537,16 @@ def scct_windows_from_bpwindows(
         Position array corresponding to `full_vcf_gts`.
     function_to_apply : Callable, optional
         A function to apply to each SNP window. Must accept arguments compatible with `sample_scct_phased`.
-    return_max : bool, optional
-        Whether to return the maximum statistic value across all windows. Default is False.
+    reduce_mode : str, optional
+        Whether to return the a specific statistic (mean or max) value across all windows.
+        Probably mean can be recommended for selection detection.
+        Default is None.
 
     Returns
     -------
     np.ndarray or float
-        If `return_max` is False, returns an array of SCCT statistics for each window.
-        If `return_max` is True, returns the maximum finite SCCT value (or NaN if none).
+        If `reduce_mode` is None, returns an array of SCCT statistics for each window.
+        If `reduce_mode` is str, returns the summary statistics of the SCCT values (or NaN if none).
     """
 
     # Get supported parameters of the function
