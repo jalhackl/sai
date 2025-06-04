@@ -22,6 +22,7 @@ class SaiFeaturePreprocessor(DataPreprocessor):
         anc_allele_available: bool = False,
         # additional phased information
         is_phased: bool = True,
+        mut_file: str = None
     ):
         """
         Initializes FeatureVectorsPreprocessor with specific frequency thresholds
@@ -47,6 +48,8 @@ class SaiFeaturePreprocessor(DataPreprocessor):
         self.anc_allele_available = anc_allele_available
 
         self.is_phased = is_phased
+
+        self.mut_file = mut_file
 
         try:
             with open(feature_config, "r") as f:
@@ -195,6 +198,11 @@ class SaiFeaturePreprocessor(DataPreprocessor):
                 items["tgt_gts_shape"] = tgt_gts.shape
                 items["ref_gts_shape"] = ref_gts.shape
                 items["src_gts_shape"] = src_gts.shape
+
+                if self.mut_file:
+                    from sai.utils.labelers.labelers_utils import extract_mutation_positions, label_mutation_overlap
+                    muts_of_interest = extract_mutation_positions(self.mut_file)
+                    items["Label"] = label_mutation_overlap(muts_of_interest=muts_of_interest, record=items, start_key="start", end_key="end")
 
             all_items.append(items)
 

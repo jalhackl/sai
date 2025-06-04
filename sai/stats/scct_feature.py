@@ -3,6 +3,7 @@ from typing import Callable, Tuple, Union, Optional, List, Dict
 import numpy.typing as npt
 import inspect
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.ndimage import uniform_filter1d
 
 
 class CalculatorTheoreticalSCCT:
@@ -158,6 +159,7 @@ class CalculatorTheoreticalSCCT:
 def scct_counting(
     gts: np.ndarray,
     central_snp: int,
+    max_ploidy: int = 1,
     return_counts: bool = False,
     use_log_ratio: bool = True,
     simple_log_ratio: bool = False,
@@ -189,12 +191,11 @@ def scct_counting(
     - This function differentiates SNPs that are linked to either the derived or ancestral allele
       at a central SNP based on mutation patterns.
     - Yates-corrected log-odds ratios are used to estimate linkage when `use_log_ratio=True`.
-    - Assumes the genotype data is phased and binary (0: ancestral, 1: derived).
     """
     central_values = gts[central_snp, :]
 
     # this is in line with the original scct-implementation
-    snp_mask = central_values == 1
+    snp_mask = central_values == max_ploidy
 
     subgroup_D = np.where(snp_mask)[0]
     subgroup_C = np.where(~snp_mask)[0]
@@ -282,9 +283,14 @@ def scct_counting(
     return sum_D, sum_C
 
 
-def sample_scct_phased(
+# def cross_population_scct()
+
+
+def sample_scct(
     gts: np.ndarray,
     central_snp: Optional[int] = None,
+    ploidy=2,
+    is_phased=True,
     maf_threshold: float = 0.05,
     return_below_threshold: Union[str, float] = "nan",
     use_log_ratio: bool = False,
@@ -294,6 +300,8 @@ def sample_scct_phased(
     full_vcf_pos: Optional[np.ndarray] = None,
     simple_log_ratio: bool = False,
     set_alpha_1: bool = False,
+    return_sums: bool = False,
+    print_ratios: bool = False,
 ) -> float:
     """
     Calculate the SCCT (Selection detection by Conditional Coalescent Tree) statistic for a given central SNP (if not given, the SNP in the middle of the window is chosen).
@@ -304,6 +312,10 @@ def sample_scct_phased(
         Genotype matrix of shape (num_snps, num_samples), encoded as 0/1.
     central_snp : int, optional
         Index of the SNP to center the statistic on. If None, the middle SNP is used.
+    ploidy : int, default=2
+        Number of chromosome sets.
+    is_phased : bool, default=True
+        Whether genotype data is phased.
     maf_threshold : float, optional
         Minimum minor allele frequency (MAF) threshold. SNPs below this are ignored.
     return_below_threshold : str or float, optional
@@ -322,6 +334,10 @@ def sample_scct_phased(
         If True, in case use_log_ratio also is True, only a simple log-ratio is used.
     set_alpha_1 : bool, optional
         If True, sets ratio_alpha to 1 regardless of other parameters.
+    return_sums : bool, optional
+        If True, do not return statistic, but sum of both group counts. In this case, theoretical is automatically set to 0. Used for cross-population calculation.
+    print_ratios : bool, optional
+        whether print computed (theoretical or empirical) ratios.
 
     Returns
     -------
@@ -333,21 +349,43 @@ def sample_scct_phased(
     - The function assumes phased binary genotype data (0/1).
     - Assumes the central SNP is biallelic.
     """
+    if return_sums:
+        theoretical = False
 
     # if index of central snp (for which the statistics is calculated) is not given, we choose the middle
     if not central_snp:
         central_snp = gts.shape[0] // 2
 
     central_values_count = np.unique(gts[central_snp, :], return_counts=True)
-    if len(central_values_count[0]) < 2:
-        print(
-            "Error: There is either only the ancestral or the derived allel present at the central SNP, return nan"
-        )
-        return float(return_below_threshold)
 
-    counts_dict = dict(zip(central_values_count[0], central_values_count[1]))
-    central_values_ancestral = counts_dict.get(0, 0)
-    central_values_derived = counts_dict.get(1, 0)
+    if ploidy == 1 or is_phased:
+        if len(central_values_count[0]) < 2:
+            print(
+                "Error: There is either only the ancestral or the derived allel present at the central SNP, return nan"
+            )
+            return float(return_below_threshold)
+
+        counts_dict = dict(zip(central_values_count[0], central_values_count[1]))
+        central_values_ancestral = counts_dict.get(0, 0)
+        central_values_derived = counts_dict.get(1, 0)
+        max_ploidy = 1
+
+    else:
+        max_ploidy = max(central_values_count[0])
+        if max_ploidy < ploidy:
+            print(
+                "Error: You are using unphased data and there are no homozygous haplotypes with the derived allele present at the central SNP, return nan"
+            )
+            return float(return_below_threshold)
+        if 0 not in central_values_count[0]:
+            print(
+                "Error: You are using unphased data and there are no homozygous haplotypes with the ancestral allele present at the central SNP, return nan"
+            )
+            return float(return_below_threshold)
+
+        counts_dict = dict(zip(central_values_count[0], central_values_count[-1]))
+        central_values_ancestral = counts_dict.get(0, 0)
+        central_values_derived = counts_dict.get(max_ploidy, 0)
 
     # check MAF
     if maf_threshold:
@@ -359,6 +397,7 @@ def sample_scct_phased(
     sum_D, sum_C = scct_counting(
         gts,
         central_snp,
+        max_ploidy=max_ploidy,
         use_log_ratio=use_log_ratio,
         simple_log_ratio=simple_log_ratio,
         return_counts=False,
@@ -372,7 +411,8 @@ def sample_scct_phased(
         ratio_alpha = theoretical_calculator.get_expectation(
             central_values_derived, central_values_ancestral
         )
-        print(f"theoretical ratio: {ratio_alpha}")
+        if print_ratios:
+            print(f"theoretical ratio: {ratio_alpha}")
 
     else:
         central_pos = gts_pos[central_snp]
@@ -390,13 +430,19 @@ def sample_scct_phased(
         sum_D_full, sum_C_full = scct_counting(
             full_vcf_gts_filtered,
             central_index_full,
-            use_log_ratio=False,
+            max_ploidy=max_ploidy,
+            use_log_ratio=use_log_ratio,
+            simple_log_ratio=simple_log_ratio,
             return_counts=False,
         )
 
         ratio_alpha = sum_D_full / sum_C_full
 
-        print(f"empirical ratio: {ratio_alpha}")
+        if print_ratios:
+            print(f"empirical ratio: {ratio_alpha}")
+
+        if return_sums:
+            return sum_D, sum_C, sum_D_full, sum_C_full
 
     S = np.log(sum_D / (ratio_alpha * sum_C))
 
@@ -514,7 +560,7 @@ def scct_windows_from_bpwindows(
     snp_window_size: int = 51,
     full_vcf_gts: Optional[np.ndarray] = None,
     full_vcf_pos: Optional[np.ndarray] = None,
-    function_to_apply: Callable = None,
+    function_to_apply: Callable = sample_scct,
     function_params: Optional[dict] = None,
     reduce_mode: Optional[
         str
@@ -772,3 +818,148 @@ def sample_scct_freqs(
     }
 
     return value_to_indices
+
+
+def smooth_average(arr, window_size):
+    arr = np.asarray(arr, dtype=float)
+
+    # Replace inf with nan so all non-finite values are treated the same
+    arr[~np.isfinite(arr)] = np.nan
+
+    # Count finite values in each window
+    counts = uniform_filter1d(
+        np.isfinite(arr).astype(float), size=window_size, mode="nearest"
+    )
+
+    # Replace nan with 0 for summing
+    arr_no_nan = np.nan_to_num(arr, nan=0.0)
+
+    # Compute sum in each window
+    summed = uniform_filter1d(arr_no_nan, size=window_size, mode="nearest")
+
+    # Avoid division by zero
+    smoothed = summed / np.maximum(counts, 1)
+
+    return smoothed
+
+
+
+def sample_scct_phased(
+    gts: np.ndarray,
+    central_snp: Optional[int] = None,
+    maf_threshold: float = 0.05,
+    return_below_threshold: Union[str, float] = "nan",
+    use_log_ratio: bool = False,
+    theoretical: bool = True,
+    gts_pos: Optional[np.ndarray] = None,
+    full_vcf_gts: Optional[np.ndarray] = None,
+    full_vcf_pos: Optional[np.ndarray] = None,
+    simple_log_ratio: bool = False,
+    set_alpha_1: bool = False,
+) -> float:
+    """
+    Calculate the SCCT (Selection detection by Conditional Coalescent Tree) statistic for a given central SNP (if not given, the SNP in the middle of the window is chosen).
+
+    Parameters
+    ----------
+    gts : np.ndarray
+        Genotype matrix of shape (num_snps, num_samples), encoded as 0/1.
+    central_snp : int, optional
+        Index of the SNP to center the statistic on. If None, the middle SNP is used.
+    maf_threshold : float, optional
+        Minimum minor allele frequency (MAF) threshold. SNPs below this are ignored.
+    return_below_threshold : str or float, optional
+        Value to return if the central SNP is monomorphic or below the MAF threshold.
+    use_log_ratio : bool, optional
+        If True, uses log odds ratio as in https://github.com/wavefancy/scct/blob/master/sources/CountTwoGroupMutations/src/FComputeWorker.java
+    theoretical : bool, optional
+        If True, uses a theoretical expectation for ratio_alpha. Otherwise, uses empirical.
+    gts_pos : np.ndarray, optional
+        Positions corresponding to the SNPs in `gts`. Required if `theoretical` is False.
+    full_vcf_gts : np.ndarray, optional
+        Full genotype matrix used for empirical estimation. Required if `theoretical` is False.
+    full_vcf_pos : np.ndarray, optional
+        Full SNP positions for the full VCF. Required if `theoretical` is False.
+    simple_log_ratio : bool, optional
+        If True, in case use_log_ratio also is True, only a simple log-ratio is used.
+    set_alpha_1 : bool, optional
+        If True, sets ratio_alpha to 1 regardless of other parameters.
+
+    Returns
+    -------
+    float
+        The SCCT statistic `S`, or the specified fallback value (e.g., NaN) if MAF is too low.
+
+    Notes
+    -----
+    - The function assumes phased binary genotype data (0/1).
+    - Assumes the central SNP is biallelic.
+    """
+
+    # if index of central snp (for which the statistics is calculated) is not given, we choose the middle
+    if not central_snp:
+        central_snp = gts.shape[0] // 2
+
+    central_values_count = np.unique(gts[central_snp, :], return_counts=True)
+    if len(central_values_count[0]) < 2:
+        print(
+            "Error: There is either only the ancestral or the derived allel present at the central SNP, return nan"
+        )
+        return float(return_below_threshold)
+
+    counts_dict = dict(zip(central_values_count[0], central_values_count[1]))
+    central_values_ancestral = counts_dict.get(0, 0)
+    central_values_derived = counts_dict.get(1, 0)
+
+    # check MAF
+    if maf_threshold:
+        total = central_values_ancestral + central_values_derived
+        maf = min(central_values_ancestral, central_values_derived) / total
+        if maf < maf_threshold:
+            return float(return_below_threshold)
+
+    sum_D, sum_C = scct_counting(
+        gts,
+        central_snp,
+        use_log_ratio=use_log_ratio,
+        simple_log_ratio=simple_log_ratio,
+        return_counts=False,
+    )
+
+    if set_alpha_1:
+        ratio_alpha = 1
+
+    elif theoretical:
+        theoretical_calculator = CalculatorTheoreticalSCCT()
+        ratio_alpha = theoretical_calculator.get_expectation(
+            central_values_derived, central_values_ancestral
+        )
+        print(f"theoretical ratio: {ratio_alpha}")
+
+    else:
+        central_pos = gts_pos[central_snp]
+
+        full_vcf_gts_filtered, full_indices_filtered = filter_zero_rows(
+            full_vcf_gts, return_indices=True
+        )
+
+        full_vcf_pos_filtered = np.delete(full_vcf_pos, full_indices_filtered, axis=0)
+
+        central_index_full = np.where(
+            np.array(full_vcf_pos_filtered) == int(central_pos)
+        )[0][0]
+
+        sum_D_full, sum_C_full = scct_counting(
+            full_vcf_gts_filtered,
+            central_index_full,
+            use_log_ratio=False,
+            return_counts=False,
+        )
+
+        ratio_alpha = sum_D_full / sum_C_full
+
+        print(f"empirical ratio: {ratio_alpha}")
+
+    S = np.log(sum_D / (ratio_alpha * sum_C))
+
+    return S

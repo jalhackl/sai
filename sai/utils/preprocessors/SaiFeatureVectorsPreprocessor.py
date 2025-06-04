@@ -44,6 +44,7 @@ class SaiFeatureVectorsPreprocessor(DataPreprocessor):
         tgt_ind_file: str,
         src_ind_file: str,
         feature_config: str,
+        mut_file: str = None,
     ):
         """
         Initializes a new instance of FeatureVectorsPreprocessor with specific parameters.
@@ -58,6 +59,8 @@ class SaiFeatureVectorsPreprocessor(DataPreprocessor):
             Path to the file listing source individual identifiers.
         feature_config : str
             Path to the configuration file specifying the features to be computed.
+        mut_file : str
+            Path to optional file with mutations to label.
 
         Raises
         ------
@@ -86,6 +89,8 @@ class SaiFeatureVectorsPreprocessor(DataPreprocessor):
 
         src_samples = sai.utils.gaia_utils.parse_ind_file(src_ind_file)
         self.samples = {"Ref": ref_samples, "Tgt": tgt_samples, "Src": src_samples}
+
+        self.mut_file = mut_file
 
     def run(
         self,
@@ -195,6 +200,17 @@ class SaiFeatureVectorsPreprocessor(DataPreprocessor):
         items["tgt_gts_shape"] = tgt_gts.shape
         items["ref_gts_shape"] = ref_gts.shape
         items["src_gts_shape"] = src_gts.shape
+
+        if self.mut_file:
+            from sai.utils.labelers.labelers_utils import (
+                label_mutation_overlap_dict,
+                extract_mutation_positions,
+            )
+
+            muts_of_interest = extract_mutation_positions(mutation_file=self.mut_file)
+            items["Label"] = label_mutation_overlap_dict(
+                muts_of_interest, items, start_key="Start", end_key="End"
+            )
 
         stat_results = items
 

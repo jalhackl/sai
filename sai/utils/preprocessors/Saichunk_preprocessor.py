@@ -21,14 +21,13 @@
 from typing import Any
 from sai.utils.generators import WindowGenerator
 from sai.utils.preprocessors import DataPreprocessor
-#from .feature_preprocessor import FeaturePreprocessor
 
 
 from typing import Any
 
-#from .feature_preprocessor import FeaturePreprocessor
-#from sai.utils.preprocessors import SaiFeaturePreprocessor
 from .saifeature_preprocessor import SaiFeaturePreprocessor
+
+from sai.utils.labelers import BinaryMutationLabeler
 
 
 class SaiChunkPreprocessor(DataPreprocessor):
@@ -53,7 +52,8 @@ class SaiChunkPreprocessor(DataPreprocessor):
         anc_allele_file: str = None,
         num_src: int = 1,
         ploidy: int = 2,
-        is_phased: bool = True
+        is_phased: bool = True,
+        mut_file: str = None
     ):
         """
         Initializes a new instance of ChunkPreprocessor.
@@ -102,11 +102,14 @@ class SaiChunkPreprocessor(DataPreprocessor):
 
         anc_allele_available = anc_allele_file is not None
 
+        self.mut_file = mut_file
+
         self.feature_preprocessor = SaiFeaturePreprocessor(
             output_file=output_file,
             feature_config=feature_config,
             anc_allele_available=anc_allele_available,
         )
+
 
     def run(self, chr_name: str, start: int, end: int) -> list[dict[str, Any]]:
         """
@@ -145,6 +148,7 @@ class SaiChunkPreprocessor(DataPreprocessor):
         )
 
         items = []
+
 
         for item in window_generator.get():
             new_item = self.feature_preprocessor.run(**item)

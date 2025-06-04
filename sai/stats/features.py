@@ -19,7 +19,7 @@
 
 
 import numpy as np
-from typing import Tuple, Union
+from typing import Tuple, Union, Any
 from scipy.spatial.distance import cdist
 from itertools import product
 
@@ -42,6 +42,8 @@ def calc_freq(gts: np.ndarray, ploidy: int = 1) -> np.ndarray:
     np.ndarray
         An array of allele frequencies for each locus.
     """
+
+
     if ploidy == 1:
         return np.mean(gts, axis=1)
     else:
@@ -94,6 +96,7 @@ def compute_matching_loci(
     # Validate input parameters
     if not (0 <= w <= 1):
         raise ValueError("Parameters w must be within the range [0, 1].")
+
 
     for op, y in y_list:
         if not (0 <= y <= 1):
@@ -156,7 +159,7 @@ def calc_u(
     pos: np.ndarray,
     w: float,
     x: float,
-    y_list: list[float],
+    y_list: list[tuple[str, float]],
     ploidy: int = 1,
     anc_allele_available: bool = False,
 ) -> tuple[int, np.ndarray]:
@@ -232,7 +235,7 @@ def calc_q(
     src_gts_list: list[np.ndarray],
     pos: np.ndarray,
     w: float,
-    y_list: list[float],
+    y_list: list[tuple[str, float]],
     quantile: float = 0.95,
     ploidy: int = 1,
     anc_allele_available: bool = False,
@@ -902,6 +905,7 @@ def H1_H12_values(
     only_derived_homozygous: bool = False,
     compute_H123: bool = False,
     ploidy: int = 1,
+    error_return_value: Any = 0
 ) -> Union[Tuple[float, float], Tuple[float, float, float]]:
     """
     Computes H1, H12, and optionally H123 statistics to measure haplotype homozygosity.
@@ -933,9 +937,18 @@ def H1_H12_values(
     # alternative calculation
     # H12_value_alt = H1_value + 2 * freqs[0] * freqs[1]
 
-    H12_value = ((freqs[0] + freqs[1]) ** 2) + np.sum(freqs[2:] ** 2)
+    if len(freqs) > 2:
+        H12_value = ((freqs[0] + freqs[1]) ** 2) + np.sum(freqs[2:] ** 2)
+    else:
+        print("Warning: H12 cannot be computed because number of SNPs is too small!")
+        H12_value = error_return_value
 
-    H123_value = ((freqs[0] + freqs[1] + freqs[2]) ** 2) + np.sum(freqs[3:] ** 2)
+    if compute_H123:
+        if len(freqs) > 3:
+                H123_value = ((freqs[0] + freqs[1] + freqs[2]) ** 2) + np.sum(freqs[3:] ** 2)
+        else:
+            print("Warning: H123 cannot be computed because number of SNPs is too small!")
+            H123_value = error_return_value
 
     if not compute_H123:
         return H1_value, H12_value
@@ -944,7 +957,7 @@ def H1_H12_values(
 
 
 def H2_value(
-    gts: np.ndarray, only_derived_homozygous: bool = False, ploidy: int = 1
+    gts: np.ndarray, only_derived_homozygous: bool = False, ploidy: int = 1, error_return_value: Any = 0
 ) -> float:
     """
     Computes the H2 statistic, which measures haplotype homozygosity excluding the most common haplotype.
@@ -969,12 +982,17 @@ def H2_value(
         freqs[freqs < 0.5] = 1 - freqs[freqs < 0.5]
     freqs = np.sort(freqs, axis=0)[::-1]
 
-    H2 = ((freqs[1]) ** 2) + np.sum(freqs[2:] ** 2)
+    if len(freqs) > 2:
+        H2 = ((freqs[1]) ** 2) + np.sum(freqs[2:] ** 2)
+    else:
+        print("Warning: H2 cannot be computed because number of SNPs is too small!")
+        H2 = error_return_value
+
     return H2
 
 
 def H2_H1_ratio(
-    gts: np.ndarray, only_derived_homozygous: bool = False, ploidy: int = 1
+    gts: np.ndarray, only_derived_homozygous: bool = False, ploidy: int = 1, error_return_value: Any = 0
 ) -> float:
     """
     Computes the H2/H1 ratio, a measure of haplotype diversity relative to the most common haplotype.
@@ -1000,7 +1018,12 @@ def H2_H1_ratio(
         gts, only_derived_homozygous=only_derived_homozygous, ploidy=ploidy
     )
 
-    H2_H1 = H2 / H1
+    try:
+        H2_H1 = H2 / H1
+    except:
+        print("Warning: H2_H1_ratio couldn't be computed, setting error_return_value!")
+        H2_H1 = error_return_value
+
     return H2_H1
 
 
@@ -1426,7 +1449,7 @@ def compute_LD_D_maladapt(
 
 
 def Kellys_Zns(
-    gts: np.ndarray, params_LD={"filter_unique": True, "maladapt_correction": False}
+    gts: np.ndarray, params_LD={"filter_unique": True, "maladapt_correction": False},error_return_value: Any = 0
 ) -> float:
     """
     Computes the Zns metric, which quantifies the overall strength of
@@ -1456,7 +1479,13 @@ def Kellys_Zns(
     values_above_diagonal = r_matrix[np.triu_indices(S, k=1)]
     r_squared = values_above_diagonal**2
 
-    prefactor = 2 / (S * (S - 1))
+    prefactor_divisor = S * (S - 1)
+
+    if prefactor_divisor == 0:
+        print("Warning: ZnS calculation failed, because divisor equals zero, return error_return_value!")
+        return error_return_value
+
+    prefactor = 2 / prefactor_divisor
     Zns = np.nansum(r_squared)
     Zns = prefactor * Zns
     return Zns

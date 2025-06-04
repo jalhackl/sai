@@ -25,6 +25,40 @@ from sai.parsers.argument_validation import positive_number
 from sai.parsers.argument_validation import existed_file
 
 
+def _run_simulationSlim(args: argparse.Namespace) -> None:
+
+    from sai.simulate import simulate_slim_data
+
+    simulate_slim_data(
+        nref=args.nref,
+        ntgt=args.ntgt,
+        ref_id=args.ref_id,
+        tgt_id=args.tgt_id,
+        src_id=args.src_id,
+        seq_len=args.seq_len,
+        output_prefix=args.output_prefix,
+        output_dir=args.output_dir,
+        is_phased=args.is_phased,
+        scaling_factor=args.scaling_factor,
+        basic_mut_rate=args.basic_mut_rate,
+        archaic_sample_time=args.archaic_sample_time,
+        nsrc=args.nsrc,
+        out_id=args.out_id,
+        nout=args.nout,
+        create_tracts_file=args.create_tracts_file,
+        create_mutation_check_file=args.create_mutation_check_file,
+        create_all_mutation_output=args.create_all_mutation_output,
+        slim_mutation_nr=args.slim_mutation_nr,
+        maladapt_mutations_preprocess=args.maladapt_mutations_preprocess,
+        extra_mutations=args.extra_mutations,
+        settings=args.settings,
+        nrep=args.nrep,
+        seed=args.seed,
+        nprocess=args.nprocess,
+        resample=args.resample
+    )
+
+
 def _run_simulation(args: argparse.Namespace) -> None:
     """
     Executes a simulation process with specified parameters.
@@ -261,3 +295,157 @@ def add_simulate_parsers(subparsers: argparse.ArgumentParser) -> None:
     )
 
     parser.set_defaults(runner=_run_simulation)
+
+
+def add_simulate_parsers(subparsers: argparse.ArgumentParser) -> None:
+    """
+    Initializes and configures the command-line interface parser
+    for simultating data.
+
+    Parameters
+    ----------
+    subparsers : argparse.ArgumentParser
+        A command-line interface parser to be configured.
+
+    """
+
+    parser = subparsers.add_parser(
+        "simulate_slim",
+        help="Simulate data using Slim",
+    )
+
+    parser.add_argument(
+        "--nref", type=int, default=108, help="Number of reference individuals"
+    )
+    parser.add_argument(
+        "--ntgt", type=int, default=99, help="Number of target individuals"
+    )
+    parser.add_argument(
+        "--ref_id", type=str, default="p1", help="Population ID for reference"
+    )
+    parser.add_argument(
+        "--tgt_id", type=str, default="p4", help="Population ID for target"
+    )
+    parser.add_argument(
+        "--src_id", type=str, default="p2", help="Population ID for source"
+    )
+    parser.add_argument(
+        "--seq_len",
+        type=int,
+        default=5000000,
+        help="Sequence length to simulate (Currently not used).",
+    )
+    parser.add_argument(
+        "--output_prefix", type=str, default="slim_sim.", help="Prefix for output files"
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="Slim_Output",
+        help="Directory to save output files",
+    )
+    parser.add_argument(
+        "--is_phased",
+        action="store_true",
+        help="Indicate if the data should be phased (default: True)",
+    )
+    parser.set_defaults(is_phased=True)
+    parser.add_argument(
+        "--scaling_factor",
+        type=int,
+        default=10,
+        help="Scaling factor for the simulation",
+    )
+    parser.add_argument(
+        "--basic_mut_rate", type=float, default=1.5e-8, help="Basic mutation rate"
+    )
+    parser.add_argument(
+        "--archaic_sample_time",
+        type=int,
+        default=152,
+        help="Time at which to sample archaic population",
+    )
+    parser.add_argument(
+        "--nsrc", type=int, default=2, help="Number of source individuals"
+    )
+    parser.add_argument(
+        "--out_id", type=str, default=None, help="Population ID for outgroup (optional)"
+    )
+    parser.add_argument(
+        "--nout",
+        type=int,
+        default=None,
+        help="Number of outgroup individuals (optional)",
+    )
+    parser.add_argument(
+        "--create_tracts_file",
+        action="store_true",
+        help="Whether to create a tracts file",
+    )
+    parser.set_defaults(create_tracts_file=False)
+    parser.add_argument(
+        "--create_mutation_check_file",
+        action="store_true",
+        help="Whether to create mutation check file",
+    )
+    parser.set_defaults(create_mutation_check_file=True)
+    parser.add_argument(
+        "--create_all_mutation_output",
+        action="store_true",
+        help="Whether to output all mutations",
+    )
+    parser.set_defaults(create_all_mutation_output=False)
+    parser.add_argument(
+        "--slim_mutation_nr", type=int, default=2, help="Number of SLiM mutation types"
+    )
+    parser.add_argument(
+        "--no_maladapt_mutations_preprocess",
+        action="store_false",
+        help="Do NOT apply Maladapt processing (exon information for removal and adding of msprime mutations)",
+        dest="maladapt_mutations_preprocess"
+    )
+    parser.set_defaults(maladapt_mutations_preprocess=True)
+    parser.add_argument(
+        "--extra_mutations",
+        action="store_true",
+        help="Include extra mutations in the simulation",
+    )
+    parser.set_defaults(extra_mutations=False)
+    parser.add_argument(
+        "--settings",
+        type=str,
+        required=False,
+        default="maladapt",
+        help="Slim script and settings to be used, currently 'maladapt' and 'uniform' are supported",
+        dest="settings",
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="random seed for the simulation; default: None",
+    )
+
+    parser.add_argument(
+        "--nrep",
+        type=positive_int,
+        default=1,
+        help="total number of simulations, i.e. how many vcf-files with simulations are created; default: 1",
+    )
+
+    parser.add_argument(
+        "--nprocess",
+        type=positive_int,
+        default=1,
+        help="number of processesfor the simulation, i.e. how many vcf-files with simulations are processed in parallel; default: 1",
+    )
+
+    parser.add_argument(
+        "--resample",
+        type=int,
+        default=0,
+        help="Nr of resamplings from same simulation.",
+    )
+
+    parser.set_defaults(runner=_run_simulationSlim)

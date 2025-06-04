@@ -5,6 +5,7 @@ from sai.utils.multiprocessing import mp_manager
 from .SaiFeatureVectorsPreprocessor import SaiFeatureVectorsPreprocessor
 from sai.utils.generators import SaiWindowDataGenerator
 
+
 class SaiLRPreprocessor:
     """
     Preprocess genomic data to generate feature vectors for machine learning models.
@@ -16,19 +17,20 @@ class SaiLRPreprocessor:
 
     def __init__(
         self,
-        chr_name: str,
-        ref_ind_file: str,
-        tgt_ind_file: str,
-        win_len: int,
-        win_step: int,
         feature_config: str,
         output_dir: str,
+        chr_name: str = "1",
+        ref_ind_file: str = None,
+        tgt_ind_file: str = None,
+        win_len: int = 50000,
+        win_step: int = 10000,
         output_prefix: str = "lr",
         nprocess: int = 1,
         ploidy: int = 2,
         is_phased: bool = True,
         anc_allele_file: str = None,
         src_ind_file: str = None,
+        label_data: bool = False,
     ):
 
         self.chr_name = chr_name
@@ -45,7 +47,18 @@ class SaiLRPreprocessor:
         self.anc_allele_file = anc_allele_file
         self.src_ind_file = src_ind_file
 
-    def run(self, vcf_file: str, rep: int = None):
+        self.label_data = label_data
+
+    def run(self, file_info: dict):
+        vcf_file = file_info["vcf_file"]
+        rep = file_info.get("rep", None)
+
+        # Fall back to constructor values if keys are missing (only_one_type=True case)
+        self.ref_ind_file = file_info.get("ref_ind_file", self.ref_ind_file)
+        self.tgt_ind_file = file_info.get("tgt_ind_file", self.tgt_ind_file)
+        self.src_ind_file = file_info.get("src_ind_file", self.src_ind_file)
+        self.anc_allele_file = file_info.get("mut_file", self.anc_allele_file)
+
         if self.nprocess <= 0:
             raise ValueError("Number of processes must be greater than 0.")
 
@@ -69,7 +82,9 @@ class SaiLRPreprocessor:
             feature_config=self.feature_config,
         )
 
-        res = mp_manager(job=preprocessor, data_generator=generator, nprocess=self.nprocess)
+        res = mp_manager(
+            job=preprocessor, data_generator=generator, nprocess=self.nprocess
+        )
 
         if res == "error":
             raise SystemExit("Some errors occurred, stopping the program ...")

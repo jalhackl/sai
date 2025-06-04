@@ -28,6 +28,8 @@ from sai.utils.generators import RandomNumberGenerator
 from sai.utils.simulators import LRTrainingDataSimulator
 from sai.utils.simulators import MsprimeSimulator
 
+from sai.utils.simulators import SlimSimulator
+
 
 def lr_simulate(
     demo_model_file: str,
@@ -325,6 +327,107 @@ def simulate_test_data(
         nsrc=nsrc,
         out_id=out_id,
         nout=nout
+    )
+
+    print(nrep)
+    print(seed)
+    generator = RandomNumberGenerator(
+        start_rep=0,
+        nrep=nrep,
+        seed=seed,
+    )
+
+    mp_manager(
+        job=simulator,
+        data_generator=generator,
+        nprocess=nprocess,
+    )
+
+
+
+
+def simulate_slim_data(
+    nref: int,
+    ntgt: int,
+    ref_id: str,
+    tgt_id: str,
+    src_id: str,
+    seq_len: int,
+    output_prefix: str,
+    output_dir: str,
+    is_phased: bool,
+    scaling_factor: int,
+    basic_mut_rate: float,
+    archaic_sample_time: int,
+    nsrc: int,
+    out_id: str = None,
+    nout: int = None,
+    create_tracts_file: bool = False,
+    create_mutation_check_file: bool = True,
+    create_all_mutation_output: bool = False,
+    slim_mutation_nr: int = 2,
+    maladapt_mutations_preprocess: bool = True,
+    extra_mutations: bool = False,
+    settings: str = "maladapt",
+    nrep: int = None,
+    seed: int = None,
+    nprocess: int = 1,
+    resample: int = 0
+) -> None:
+    """
+    Simulates genomic data using SLiM based on given parameters.
+
+    This function wraps the SlimSimulator initialization and execution.
+
+    Args:
+        demo_model_file (str): Path to the demographic model file used for simulations.
+        nrep (int): Number of simulation replicates to generate.
+        nref (int): Number of reference individuals included in the simulation.
+        ntgt (int): Number of target individuals included in the simulation.
+        ref_id (str): Identifier for the reference population in the simulation.
+        tgt_id (str): Identifier for the target population in the simulation.
+        src_id (str): Identifier for the source population in the simulation.
+        ploidy (int): Ploidy level of the individuals in the simulation (e.g., 2 for diploids).
+        is_phased (bool): If True, the simulated data is phased; otherwise, it is unphased.
+        seq_len (int): Length of the genomic sequence to be simulated (in base pairs).
+        mut_rate (float): Mutation rate per base pair per generation.
+        rec_rate (float): Recombination rate per base pair per generation.
+        output_prefix (str): Prefix for output file names.
+        output_dir (str): Directory where output files will be stored.
+        seed (int): Random seed for reproducibility.
+        nprocess (int): Number of processes for parallel processing.
+
+    Returns:
+        None: The function does not return anything but generates simulation output files.
+
+    """
+
+    # Initialize the simulator with the given parameters
+
+    simulator = SlimSimulator(
+        nref=nref,
+        ntgt=ntgt,
+        ref_id=ref_id,
+        tgt_id=tgt_id,
+        src_id=src_id,
+        seq_len=seq_len,
+        output_prefix=output_prefix,
+        output_dir=output_dir,
+        is_phased=is_phased,
+        scaling_factor=scaling_factor,
+        basic_mut_rate=basic_mut_rate,
+        archaic_sample_time=archaic_sample_time,
+        nsrc=nsrc,
+        out_id=out_id,
+        nout=nout,
+        create_tracts_file=create_tracts_file,
+        create_mutation_check_file=create_mutation_check_file,
+        create_all_mutation_output=create_all_mutation_output,
+        slim_mutation_nr=slim_mutation_nr,
+        maladapt_mutations_preprocess=maladapt_mutations_preprocess,
+        extra_mutations=extra_mutations,
+        settings=settings,
+        resample=resample
     )
 
     print(nrep)

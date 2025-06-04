@@ -21,3 +21,4 @@
 from .DataSimulator import DataSimulator
 from .MsprimeSimulator import MsprimeSimulator
 from .LRTrainingDataSimulator import LRTrainingDataSimulator
+from .SlimSimulator import SlimSimulator

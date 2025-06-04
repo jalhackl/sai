@@ -31,6 +31,7 @@ from sai.utils.preprocessors import SaiFeatureVectorsPreprocessor
 
 from sai.utils.preprocessors import SaiLRPreprocessor
 
+
 def lr_preprocess(
     vcf_file: str,
     chr_name: str,
@@ -135,6 +136,7 @@ def Sai_lr_preprocess(
     is_phased: bool = True,
     anc_allele_file: str = None,
     src_ind_file: str = None,
+    mut_file: str = None,
 ) -> None:
     """
     Preprocess genomic data to generate feature vectors for machine learning models.
@@ -181,7 +183,6 @@ def Sai_lr_preprocess(
     if nprocess <= 0:
         raise ValueError("Number of processes must be greater than 0.")
 
-
     generator = SaiWindowDataGenerator(
         vcf_file=vcf_file,
         src_ind_file=src_ind_file,
@@ -194,8 +195,6 @@ def Sai_lr_preprocess(
         win_len=win_len,
         win_step=win_step,
     )
-
-
 
     preprocessor = SaiFeatureVectorsPreprocessor(
         ref_ind_file=ref_ind_file,
@@ -212,6 +211,17 @@ def Sai_lr_preprocess(
 
     df_res = pd.DataFrame(res)
 
+    if mut_file:
+        from sai.utils.labelers.labelers_utils import (
+            label_mutation_overlap,
+            extract_mutation_positions,
+        )
+
+        muts_of_interest = extract_mutation_positions(mutation_file=mut_file)
+        df_res = label_mutation_overlap(
+            muts_of_interest, df_res, start_col="Start", end_col="End"
+        )
+
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, f"{output_prefix}.features")
     df_res.to_csv(output_file, sep="\t", index=False)
@@ -220,26 +230,26 @@ def Sai_lr_preprocess(
     return df_res
 
 
-
-
 def Sai_lr_process_folder(
     vcf_location: str,
-    chr_name,
-    ref_ind_file,
-    tgt_ind_file,
-    src_ind_file,
-    win_len,
-    win_step,
     feature_config,
     output_dir,
+    ref_ind_file=None,
+    tgt_ind_file=None,
+    src_ind_file=None,
+    chr_name="1",
+    win_len=50000,
+    win_step=10000,
     nprocess=1,
+    label_data=True,
+    vcf_ending=".vcf.gz",
 ) -> None:
     """
     Preprocess VCF files and run the UNet data preprocessing simulation.
 
     This function processes a VCF file or a directory containing VCF files,
     and then uses the `SaiLRPreprocessor` to prepare data for further processing
-    or simulation. 
+    or simulation.
 
     Parameters
     ----------
@@ -282,29 +292,26 @@ def Sai_lr_process_folder(
 
     """
 
-
     simulator = SaiLRPreprocessor(
-    chr_name=chr_name,
-    ref_ind_file=ref_ind_file,
-    tgt_ind_file=tgt_ind_file,
-    src_ind_file=src_ind_file,
-    win_len=win_len,
-    win_step=win_step,
-    feature_config=feature_config,
-    output_dir=output_dir,
-    nprocess=nprocess,
-)
+        chr_name=chr_name,
+        ref_ind_file=ref_ind_file,
+        tgt_ind_file=tgt_ind_file,
+        src_ind_file=src_ind_file,
+        win_len=win_len,
+        win_step=win_step,
+        feature_config=feature_config,
+        output_dir=output_dir,
+        nprocess=nprocess,
+        label_data=label_data,
+    )
 
-
-    generator = FileGenerator(file_location=vcf_location, file_ending=".vcf.gz")
+    # generator = FileGenerator(file_location=vcf_location, file_ending=".vcf.gz")
+    generator = FileGenerator(file_location=vcf_location, file_ending=vcf_ending)
 
     all_res = mp_manager(
         job=simulator,
         data_generator=generator,
         nprocess=nprocess,
-        #lock=lock
     )
 
     return all_res
-
-

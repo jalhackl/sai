@@ -23,7 +23,7 @@ from sai.parsers.score_parser import add_score_parser
 from sai.parsers.outlier_parser import add_outlier_parser
 from sai.parsers.plot_parser import add_plot_parser
 from sai.parsers.simulate_parsers import add_simulate_parsers
-
+from sai.parsers.preprocess_parsers import add_preprocess_parsers
 
 def _set_sigpipe_handler() -> None:
     """
@@ -57,6 +57,7 @@ def _sai_cli_parser() -> argparse.ArgumentParser:
     add_outlier_parser(subparsers)
     add_plot_parser(subparsers)
     add_simulate_parsers(subparsers)
+    add_preprocess_parsers(subparsers)
 
     return top_parser
 

@@ -44,7 +44,8 @@ def stat(
     feature_config: str,
     num_workers: int,
     ploidy: int = 2,
-    is_phased: bool = True
+    is_phased: bool = True,
+    mut_file: str = None
 ) -> None:
     """
     Processes and scores genomic data by generating windowed data and feature vectors.
@@ -103,7 +104,8 @@ def stat(
         num_src=num_src,
         # also provide ploidy and is_phased information
         ploidy=ploidy,
-        is_phased=is_phased
+        is_phased=is_phased,
+        mut_file=mut_file
     )
 
     #header = f"Chrom\tStart\tEnd\tRef\tTgt\tSrc\tN(Variants)\t{stat_type}\tCandidate\n"
