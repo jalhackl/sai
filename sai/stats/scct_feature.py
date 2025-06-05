@@ -283,7 +283,9 @@ def scct_counting(
     return sum_D, sum_C
 
 
-# def cross_population_scct()
+def compute_scct_ratio(sum_D, sum_C, ratio_alpha):
+    S = np.log(sum_D / (ratio_alpha * sum_C))
+    return S
 
 
 def sample_scct(
@@ -349,8 +351,6 @@ def sample_scct(
     - The function assumes phased binary genotype data (0/1).
     - Assumes the central SNP is biallelic.
     """
-    if return_sums:
-        theoretical = False
 
     # if index of central snp (for which the statistics is calculated) is not given, we choose the middle
     if not central_snp:
@@ -405,8 +405,11 @@ def sample_scct(
 
     if set_alpha_1:
         ratio_alpha = 1
+        sum_D_full = 1
+        sum_C_full = 1
 
     elif theoretical:
+
         theoretical_calculator = CalculatorTheoreticalSCCT()
         ratio_alpha = theoretical_calculator.get_expectation(
             central_values_derived, central_values_ancestral
@@ -441,10 +444,10 @@ def sample_scct(
         if print_ratios:
             print(f"empirical ratio: {ratio_alpha}")
 
-        if return_sums:
-            return sum_D, sum_C, sum_D_full, sum_C_full
+    if return_sums:
+        return sum_D, sum_C, sum_D_full, sum_C_full, ratio_alpha
 
-    S = np.log(sum_D / (ratio_alpha * sum_C))
+    S = compute_scct_ratio(sum_D, sum_C, ratio_alpha)
 
     return S
 
@@ -552,6 +555,69 @@ def filter_zero_rows(
         return filtered_arr
     else:
         return filtered_arr, zero_row_indices
+
+
+def filter_zero_rows_multi(
+    *gts: np.ndarray, return_indices: bool = False, mode: str = "any"
+) -> Union[Tuple[np.ndarray, ...], Tuple[Tuple[np.ndarray, ...], np.ndarray]]:
+    """
+    Remove rows based on zero patterns across multiple genotype matrices.
+
+    Parameters
+    ----------
+    *gts : np.ndarray
+        Two or more 2D NumPy arrays (each SNPs x individuals). All arrays must have the same number of rows.
+    return_indices : bool, optional
+        If True, also return the indices of the rows that were removed.
+    mode : str, optional
+        Filtering mode:
+            - "all": remove rows that are all zero in every array.
+            - "any" (default): remove rows that are all zero in at least one array.
+
+    Returns
+    -------
+    Tuple[np.ndarray, ...]
+        The filtered genotype matrices.
+    Tuple[Tuple[np.ndarray, ...], np.ndarray]
+        If `return_indices` is True, returns a tuple where the first element is the
+        tuple of filtered arrays, and the second is an array of indices of the removed rows.
+
+    Raises
+    ------
+    ValueError
+        If fewer than two arrays are given, if array row counts mismatch, or if an invalid mode is used.
+    """
+
+    if len(gts) < 2:
+        raise ValueError("At least two genotype arrays must be provided.")
+
+    num_rows = gts[0].shape[0]
+    for i, g in enumerate(gts):
+        if g.shape[0] != num_rows:
+            raise ValueError(
+                f"All arrays must have the same number of rows. Array at index {i} has a different number of rows."
+            )
+
+    # Build per-array zero masks
+    zero_masks = [np.all(g == 0, axis=1) for g in gts]
+
+    # Determine which rows to remove based on mode
+    if mode == "all":
+        combined_mask = np.logical_and.reduce(zero_masks)
+    elif mode == "any":
+        combined_mask = np.logical_or.reduce(zero_masks)
+    else:
+        raise ValueError("Invalid mode. Use 'all' or 'any'.")
+
+    zero_row_indices = np.where(combined_mask)[0]
+
+    # Filter each array
+    filtered_arrays = tuple(g[~combined_mask] for g in gts)
+
+    if return_indices:
+        return filtered_arrays, zero_row_indices
+    else:
+        return filtered_arrays
 
 
 def scct_windows_from_bpwindows(
@@ -843,123 +909,190 @@ def smooth_average(arr, window_size):
     return smoothed
 
 
-
-def sample_scct_phased(
-    gts: np.ndarray,
-    central_snp: Optional[int] = None,
+def cross_scct(
+    gts1_window,
+    gts2_window,
+    positions_window,
+    full_vcf_gts1,
+    full_vcf_gts2,
+    full_vcf_pos,
+    ploidy=2,
+    is_phased=True,
     maf_threshold: float = 0.05,
     return_below_threshold: Union[str, float] = "nan",
     use_log_ratio: bool = False,
-    theoretical: bool = True,
-    gts_pos: Optional[np.ndarray] = None,
-    full_vcf_gts: Optional[np.ndarray] = None,
-    full_vcf_pos: Optional[np.ndarray] = None,
+    theoretical: bool = False,
     simple_log_ratio: bool = False,
     set_alpha_1: bool = False,
-) -> float:
-    """
-    Calculate the SCCT (Selection detection by Conditional Coalescent Tree) statistic for a given central SNP (if not given, the SNP in the middle of the window is chosen).
+    error_value: Union[str, float] = np.nan,
+    log_ratio_of_log_ratios: bool = False,
+    return_multiple_values: bool = False,
+    simple_max: bool = False,
+):
 
-    Parameters
-    ----------
-    gts : np.ndarray
-        Genotype matrix of shape (num_snps, num_samples), encoded as 0/1.
-    central_snp : int, optional
-        Index of the SNP to center the statistic on. If None, the middle SNP is used.
-    maf_threshold : float, optional
-        Minimum minor allele frequency (MAF) threshold. SNPs below this are ignored.
-    return_below_threshold : str or float, optional
-        Value to return if the central SNP is monomorphic or below the MAF threshold.
-    use_log_ratio : bool, optional
-        If True, uses log odds ratio as in https://github.com/wavefancy/scct/blob/master/sources/CountTwoGroupMutations/src/FComputeWorker.java
-    theoretical : bool, optional
-        If True, uses a theoretical expectation for ratio_alpha. Otherwise, uses empirical.
-    gts_pos : np.ndarray, optional
-        Positions corresponding to the SNPs in `gts`. Required if `theoretical` is False.
-    full_vcf_gts : np.ndarray, optional
-        Full genotype matrix used for empirical estimation. Required if `theoretical` is False.
-    full_vcf_pos : np.ndarray, optional
-        Full SNP positions for the full VCF. Required if `theoretical` is False.
-    simple_log_ratio : bool, optional
-        If True, in case use_log_ratio also is True, only a simple log-ratio is used.
-    set_alpha_1 : bool, optional
-        If True, sets ratio_alpha to 1 regardless of other parameters.
+    try:
+        if not log_ratio_of_log_ratios:
+            P1_sumD, P1_sumC, P1_sumD_full, P1_sumC_full, ratio_alpha1 = sample_scct(
+                gts1_window,
+                gts_pos=positions_window,
+                full_vcf_gts=full_vcf_gts1,
+                full_vcf_pos=full_vcf_pos,
+                return_sums=True,
+                ploidy=ploidy,
+                is_phased=is_phased,
+                maf_threshold=maf_threshold,
+                central_snp=None,
+                theoretical=theoretical,
+                return_below_threshold=return_below_threshold,
+                use_log_ratio=use_log_ratio,
+                simple_log_ratio=simple_log_ratio,
+                set_alpha_1=set_alpha_1,
+            )
+            P2_sumD, P2_sumC, P2_sumD_full, P2_sumC_full, ratio_alpha2 = sample_scct(
+                gts2_window,
+                gts_pos=positions_window,
+                full_vcf_gts=full_vcf_gts2,
+                full_vcf_pos=full_vcf_pos,
+                return_sums=True,
+                ploidy=ploidy,
+                is_phased=is_phased,
+                maf_threshold=maf_threshold,
+                central_snp=None,
+                theoretical=theoretical,
+                return_below_threshold=return_below_threshold,
+                use_log_ratio=use_log_ratio,
+                simple_log_ratio=simple_log_ratio,
+                set_alpha_1=set_alpha_1,
+            )
 
-    Returns
-    -------
-    float
-        The SCCT statistic `S`, or the specified fallback value (e.g., NaN) if MAF is too low.
+            ratio_alpha_D = P1_sumD_full / P2_sumD_full
+            ratio_alpha_C = P1_sumC_full / P2_sumC_full
 
-    Notes
-    -----
-    - The function assumes phased binary genotype data (0/1).
-    - Assumes the central SNP is biallelic.
-    """
+            if simple_max:
+                if abs(P1_sumD) > abs(P1_sumC):
+                    P1_sum = P1_sumD
+                    P1_sum_full = P1_sumD_full
+                else:
+                    P1_sum = P1_sumC
+                    P1_sum_full = P1_sumC_full
+                if abs(P2_sumD) > abs(P2_sumC):
+                    P2_sum = P2_sumD
+                    P2_sum_full = P2_sumD_full
+                else:
+                    P2_sum = P2_sumC
+                    P2_sum_full = P2_sumC_full
+                ratio_alpha = P1_sum_full / P2_sum_full
+                cross_SCCT = compute_scct_ratio(P1_sum, P2_sum, ratio_alpha)
+                return cross_SCCT
 
-    # if index of central snp (for which the statistics is calculated) is not given, we choose the middle
-    if not central_snp:
-        central_snp = gts.shape[0] // 2
+            SCCT_D = compute_scct_ratio(P1_sumD, P2_sumD, ratio_alpha_D)
+            SCCT_C = compute_scct_ratio(P1_sumC, P2_sumC, ratio_alpha_C)
 
-    central_values_count = np.unique(gts[central_snp, :], return_counts=True)
-    if len(central_values_count[0]) < 2:
-        print(
-            "Error: There is either only the ancestral or the derived allel present at the central SNP, return nan"
-        )
-        return float(return_below_threshold)
+            if return_multiple_values:
+                return SCCT_D, SCCT_C
 
-    counts_dict = dict(zip(central_values_count[0], central_values_count[1]))
-    central_values_ancestral = counts_dict.get(0, 0)
-    central_values_derived = counts_dict.get(1, 0)
+            cross_SCCT = max(abs(SCCT_D), abs(SCCT_C))
 
-    # check MAF
-    if maf_threshold:
-        total = central_values_ancestral + central_values_derived
-        maf = min(central_values_ancestral, central_values_derived) / total
-        if maf < maf_threshold:
-            return float(return_below_threshold)
+            return cross_SCCT
 
-    sum_D, sum_C = scct_counting(
-        gts,
-        central_snp,
+        else:
+
+            SCCT1 = sample_scct(
+                gts1_window,
+                gts_pos=positions_window,
+                full_vcf_gts=full_vcf_gts1,
+                full_vcf_pos=full_vcf_pos,
+                return_sums=False,
+                ploidy=ploidy,
+                is_phased=is_phased,
+                maf_threshold=maf_threshold,
+                central_snp=None,
+                theoretical=theoretical,
+                return_below_threshold=return_below_threshold,
+                use_log_ratio=use_log_ratio,
+                simple_log_ratio=simple_log_ratio,
+                set_alpha_1=set_alpha_1,
+            )
+            SCCT2 = sample_scct(
+                gts2_window,
+                gts_pos=positions_window,
+                full_vcf_gts=full_vcf_gts2,
+                full_vcf_pos=full_vcf_pos,
+                return_sums=False,
+                ploidy=ploidy,
+                is_phased=is_phased,
+                maf_threshold=maf_threshold,
+                central_snp=None,
+                theoretical=theoretical,
+                return_below_threshold=return_below_threshold,
+                use_log_ratio=use_log_ratio,
+                simple_log_ratio=simple_log_ratio,
+                set_alpha_1=set_alpha_1,
+            )
+
+            cross_SCCT = np.log(abs(SCCT1) / abs(SCCT2))
+
+            return cross_SCCT
+
+    except:
+        return error_value
+
+
+def cross_scct_diff(
+    gts1_window,
+    gts2_window,
+    positions_window,
+    full_vcf_gts1,
+    full_vcf_gts2,
+    full_vcf_pos,
+    ploidy=2,
+    is_phased=True,
+    maf_threshold: float = 0.05,
+    return_below_threshold: Union[str, float] = "nan",
+    use_log_ratio: bool = False,
+    theoretical: bool = False,
+    simple_log_ratio: bool = False,
+    set_alpha_1: bool = False,
+    absolute_values: bool = False,
+):
+    res1 = sample_scct(
+        gts1_window,
+        central_snp=None,
+        gts_pos=positions_window,
+        full_vcf_gts=full_vcf_gts1,
+        full_vcf_pos=full_vcf_pos,
+        return_sums=False,
+        ploidy=ploidy,
+        is_phased=is_phased,
+        maf_threshold=maf_threshold,
+        theoretical=theoretical,
+        return_below_threshold=return_below_threshold,
         use_log_ratio=use_log_ratio,
         simple_log_ratio=simple_log_ratio,
-        return_counts=False,
+        set_alpha_1=set_alpha_1,
     )
 
-    if set_alpha_1:
-        ratio_alpha = 1
+    res2 = sample_scct(
+        gts2_window,
+        central_snp=None,
+        gts_pos=positions_window,
+        full_vcf_gts=full_vcf_gts2,
+        full_vcf_pos=full_vcf_pos,
+        return_sums=False,
+        ploidy=ploidy,
+        is_phased=is_phased,
+        maf_threshold=maf_threshold,
+        theoretical=theoretical,
+        return_below_threshold=return_below_threshold,
+        use_log_ratio=use_log_ratio,
+        simple_log_ratio=simple_log_ratio,
+        set_alpha_1=set_alpha_1,
+    )
 
-    elif theoretical:
-        theoretical_calculator = CalculatorTheoreticalSCCT()
-        ratio_alpha = theoretical_calculator.get_expectation(
-            central_values_derived, central_values_ancestral
-        )
-        print(f"theoretical ratio: {ratio_alpha}")
+    if absolute_values:
+        res1 = [abs(x) for x in res1]
+        res2 = [abs(x) for x in res2]
 
-    else:
-        central_pos = gts_pos[central_snp]
 
-        full_vcf_gts_filtered, full_indices_filtered = filter_zero_rows(
-            full_vcf_gts, return_indices=True
-        )
-
-        full_vcf_pos_filtered = np.delete(full_vcf_pos, full_indices_filtered, axis=0)
-
-        central_index_full = np.where(
-            np.array(full_vcf_pos_filtered) == int(central_pos)
-        )[0][0]
-
-        sum_D_full, sum_C_full = scct_counting(
-            full_vcf_gts_filtered,
-            central_index_full,
-            use_log_ratio=False,
-            return_counts=False,
-        )
-
-        ratio_alpha = sum_D_full / sum_C_full
-
-        print(f"empirical ratio: {ratio_alpha}")
-
-    S = np.log(sum_D / (ratio_alpha * sum_C))
-
-    return S
+    diff_scct = res1 - res2
+    return diff_scct
