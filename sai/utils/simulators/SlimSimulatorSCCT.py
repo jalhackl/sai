@@ -18,22 +18,26 @@
 #    https://www.gnu.org/licenses/gpl-3.0.en.html
 
 
+import allel
 import demes
 import msprime
 import os
 import tskit
+import pyslim
 from copy import deepcopy
-from sai.utils.simulators import DataSimulator
+import numpy as np
+
 import random
 import subprocess
 import csv
 from collections import defaultdict
 from typing import Dict, Any, List, Optional, Union, Tuple, DefaultDict, Set
 
+from sai.utils.simulators import DataSimulator
 from sai.utils.simulators.slim_simulator_utils import *
 
 
-class SlimSimulator(DataSimulator):
+class SlimSimulatorSCCT(DataSimulator):
     """
     A simulator for generating genetic data using SLiM within a tskit-based workflow.
 
@@ -100,39 +104,41 @@ class SlimSimulator(DataSimulator):
 
     def __init__(
         self,
-        nref: int = 108,
-        ntgt: int = 99,
-        ref_id: str = "p1",
-        tgt_id: str = "p4",
-        src_id: str = "p2",
-        seq_len: int = 5000000,
-        output_prefix: str = "slim_sim",
-        output_dir: str = "slim_res",
+        slim_script_folder=os.path.join("examples", "slim", "scct"),
+        slim_script_name="scct_basic_african.slim",
+        nsamples: int = 120,
+        pop_of_interest: str = "p1",
+        seq_len: int = 3000000,
+        output_prefix: str = "slim_scct_sim",
+        output_dir: str = "slim_scct_res",
         is_phased: bool = True,
         scaling_factor=10,
-        basic_mut_rate=1.5e-8,
+        basic_mut_rate=0.0,
+        neutral_mut_rate=1.5e-8,
         archaic_sample_time: int = 152,
-        nsrc: int = 2,
-        out_id: str = None,
-        nout: int = None,
         create_tracts_file: bool = False,
         create_mutation_check_file: bool = True,
         create_all_mutation_output: bool = False,
         slim_mutation_nr: int = 2,
-        maladapt_mutations_preprocess: bool = True,
         extra_mutations: bool = False,
-        settings: str = "maladapt",
+        recapitate_slim_sim: bool = True,
         resample: int = 0,
         chromosome: str = "1",
+        bottleneck_factor: float = 1,
+        expansion_factor: float = 1,
+        initial_sweep_frequency: float = 0.001,
+        selection_coefficient: float = 0.00325,
+        recombination_rate: float = 1.35e-8,
+        ancestral_Ne: int = 12500,
     ):
 
         super().__init__(
             demo_model_file=None,
-            nref=nref,
-            ntgt=ntgt,
-            ref_id=ref_id,
-            tgt_id=tgt_id,
-            src_id=src_id,
+            nref=None,
+            ntgt=None,
+            ref_id=None,
+            tgt_id=None,
+            src_id=None,
             ploidy=None,
             seq_len=seq_len,
             mut_rate=None,
@@ -140,33 +146,13 @@ class SlimSimulator(DataSimulator):
             output_prefix=output_prefix,
             output_dir=output_dir,
         )
-        self.test_tgt_id = self.tgt_id
+
+        self.nsamples = nsamples
+
+        self.slim_script_folder = slim_script_folder
+        self.slim_script_name = slim_script_name
+
         self.is_phased = is_phased
-
-        self.nsrc = nsrc
-        self.out_id = out_id
-        self.nout = nout
-
-        self.settings = settings
-
-        if self.settings == "maladapt":
-            self.dominances = ["recessive", "additive", "partial"]
-            self.filenames = {
-                "recessive": "maladapt_repl_adaptive_recessive_exon_repl.slim",
-                "additive": "maladapt_repl_adaptive_additive_w_muteff_exons_original.slim",
-                "partial": "maladapt_repl_adaptive_partial_plus_muteff_exons_repl.slim",
-            }
-            self.slim_script_folder = os.path.join("examples", "slim", "maladapt")
-        elif self.settings == "uniform":
-            self.dominances = ["uniform"]
-            self.filenames = {
-                "uniform": "simpler_adapt_v1_plus_params.slim",
-            }
-            self.slim_script_folder = os.path.join("examples", "slim")
-        else:
-            raise Exception(
-                "Model settings currently not supported (only maladapt and uniform)!"
-            )
 
         self.create_tracts_file = create_tracts_file
         self.create_mutation_check_file = create_mutation_check_file
@@ -178,24 +164,38 @@ class SlimSimulator(DataSimulator):
         self.basic_mut_rate = basic_mut_rate
         self.mu = self.basic_mut_rate * self.scaling_factor
 
+        self.neutral_mut_rate = neutral_mut_rate
+        self.neutral_mut_rate_scaled = neutral_mut_rate * self.scaling_factor
+
         self.slim_mutation_nr = slim_mutation_nr
 
         self.extra_mutations = extra_mutations
-        self.maladapt_mutations_preprocess = maladapt_mutations_preprocess
 
         self.archaic_sample_time = archaic_sample_time
-        self.pops = {"ref": ref_id, "src": src_id, "tgt": tgt_id}
-        self.sample_sizes = {"ref": nref, "src": nsrc, "tgt": ntgt}
+        self.pops = {"pop_of_interest": pop_of_interest}
+        self.sample_sizes = {"pop_of_interest": nsamples}
 
-        self.seq_len = seq_len
+        self.seq_length = seq_len
 
-        self.exon_file = os.path.join(
-            self.slim_script_folder, "sim_seq_info_chr3region.txt"
-        )
 
         self.resample = resample
 
         self.chromosome = chromosome
+
+        self.pop_of_interest = pop_of_interest
+
+        self.recapitate_slim_sim = recapitate_slim_sim
+
+        self.bottleneck_factor = bottleneck_factor
+        self.expansion_factor = expansion_factor
+        self.initial_sweep_frequency = initial_sweep_frequency
+        self.selection_coefficient = selection_coefficient
+        self.recombination_rate = recombination_rate
+
+        self.recombination_rate_scaled = 0.5 * (
+            1 - (1 - 2 * self.recombination_rate) ** self.scaling_factor
+        )
+        self.ancestral_Ne = ancestral_Ne / self.scaling_factor
 
     def run(self, rep: int = None, seed: int = None) -> list[dict[str, str]]:
         """
@@ -227,32 +227,19 @@ class SlimSimulator(DataSimulator):
             self.output_prefix if rep is None else f"{self.output_prefix}.{rep}"
         )
 
-        adm_range = [0.01, 0.02, 0.05, 0.1]
-
-        dominance = random.choice(self.dominances)
-        adm_time = random.choice(range(8697, 8747))
-        adm_amount = random.choice(adm_range)
-        sel_time = random.choice(range(0, 61))
-        slim_script_name = self.filenames[dominance]
+        slim_script_name = self.slim_script_name
 
         slim_script = os.path.join(self.slim_script_folder, slim_script_name)
 
         os.makedirs(output_dir, exist_ok=True)
-        ts_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.ts")
-        txt_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.txt")
-        vcf_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.vcf.gz")
+        ts_file = os.path.join(output_dir, f"{output_prefix}.ts")
+        txt_file = os.path.join(output_dir, f"{output_prefix}.txt")
+        
         bed_file = os.path.join(output_dir, f"{output_prefix}.true.tracts.bed")
-        ref_ind_file = os.path.join(output_dir, f"{output_prefix}.ref.ind.list")
-        tgt_ind_file = os.path.join(output_dir, f"{output_prefix}.tgt.ind.list")
+        ind_file = os.path.join(output_dir, f"{output_prefix}.ind.list")
 
-        if self.nsrc is not None and self.nsrc > 0:
-            src_ind_file = os.path.join(output_dir, f"{output_prefix}.src.ind.list")
-        else:
-            src_ind_file = None
-        if self.nout is not None and self.nout > 0:
-            out_ind_file = os.path.join(output_dir, f"{output_prefix}.out.ind.list")
-        else:
-            out_ind_file = None
+        vcf_file = os.path.join(output_dir, f"{output_prefix}.vcf")
+        slim_vcf_file = os.path.join(output_dir, f"{output_prefix}_slim.vcf")
 
         mut_tgt_file = os.path.join(output_dir, f"{output_prefix}.tgt.mut.list")
 
@@ -260,11 +247,11 @@ class SlimSimulator(DataSimulator):
             "ts_file": ts_file,
             "vcf_file": vcf_file,
             "bed_file": bed_file,
-            "ref_ind_file": ref_ind_file,
-            "tgt_ind_file": tgt_ind_file,
-            "src_ind_file": src_ind_file,
+            "ind_file": ind_file,
             "txt_file": txt_file,
+            "slim_vcf_file": slim_vcf_file,
         }
+
         if self.create_mutation_check_file:
             file_paths["mut_file"] = mut_tgt_file
 
@@ -272,9 +259,7 @@ class SlimSimulator(DataSimulator):
         if self.resample == 0:
             all_file_paths.append(file_paths)
 
-        simulation = self.perform_slim_simulation(
-            file_paths, slim_script, adm_time, sel_time, adm_amount, dominance, rep
-        )
+        simulation = self.perform_slim_simulation(file_paths, slim_script, rep)
 
         ts_path = simulation["output_file"]
         ts = tskit.load(ts_path)
@@ -285,80 +270,50 @@ class SlimSimulator(DataSimulator):
             print("currently not implemented!")
             pass
 
-        # simplify and sample part
-        ts_simplified, all_ps_simplified, all_p_ref, all_p_tgt, all_p_src = (
-            self.sample_and_simplify(
+        if self.recapitate_slim_sim:
+            ts = pyslim.recapitate(
                 ts,
-                pops=self.pops,
-                sample_sizes=self.sample_sizes,
-                archaic_sample_time=self.archaic_sample_time,
-                seed=seed,
+                ancestral_Ne=self.ancestral_Ne,
+                recombination_rate=self.recombination_rate_scaled,
             )
-        )
 
-        if self.maladapt_mutations_preprocess:
-            start, end = self.read_exon_file(self.exon_file)
-            if not self.extra_mutations:
-                ts_simplified = combine_mutation_trees(
-                    ts_simplified,
-                    self.mu,
-                    start,
-                    end,
-                    filename=None,
-                    write_vcf=False,
-                    save_trees=False,
-                )
-            else:
-                ts_simplified = only_add_maladapt_mutations(
-                    ts_sample=ts_simplified,
-                    mu=self.mu,
-                    start=start,
-                    end=end,
-                    filename=None,
-                )
+        # simplify and sample part
 
-        if self.extra_mutations and not self.maladapt_mutations_preprocess:
-            ts_simplified = msprime.mutate(ts_simplified, rate=self.mu, keep=True)
+        rng = np.random.default_rng()
+        alive_inds = pyslim.individuals_alive_at(ts, 0)
+        keep_indivs = rng.choice(alive_inds, self.nsamples, replace=False)
+        keep_nodes = []
+        for i in keep_indivs:
+            keep_nodes.extend(ts.individual(i).nodes)
+
+        ts_simplified = ts.simplify(keep_nodes, keep_input_roots=True)
+
+        if self.extra_mutations:
+            ts_simplified = msprime.mutate(
+                ts_simplified, rate=self.neutral_mut_rate_scaled, keep=True
+            )
 
         # write vcf
-        with open(file_paths["vcf_file"], "w") as vcf_file:
-            ts_simplified.write_vcf(
-                vcf_file,
-                individuals=all_ps_simplified,
-                individual_names=[self.identifier + str(x) for x in all_ps_simplified],
-            )
 
-        # create sample files
-        self._create_ref_tgt_file_slim(
-            ref_ind_file=file_paths["ref_ind_file"],
-            tgt_ind_file=file_paths["tgt_ind_file"],
-            all_p_ref=all_p_ref,
-            all_p_tgt=all_p_tgt,
-            pops=self.pops,
-            identifier="tsk_",
-            src_ind_file=file_paths["src_ind_file"],
-            all_p_src=all_p_src,
+        indivlist = []
+        for i in pyslim.individuals_alive_at(ts_simplified, 0):
+            ind = ts_simplified.individual(i)
+            if ts_simplified.node(ind.nodes[0]).is_sample():
+                indivlist.append(i)
+
+        with open(file_paths["vcf_file"], "w") as vcffile:
+            ts_simplified.write_vcf(vcffile, individuals=indivlist)
+        self.write_vcf_sample_list(
+            vcf_path=file_paths["vcf_file"],
+            output_file=file_paths["ind_file"],
+            population_label=self.pop_of_interest,
         )
-
-        if self.create_tracts_file:
-            ts_only_src_tgt = self.simplify_by_source_target(
-                ts_simplified, source_pop_name=self.src_id, target_pop_name=self.tgt_id
-            )
-            fragments = self.get_introgressed_segments(
-                ts_only_src_tgt,
-                source_pop_name=self.src_id,
-                target_pop_name=self.tgt_id,
-                print_results=False,
-            )
-            self.write_introgressed_segments_to_tsv(
-                fragments, file_paths["bed_file"], chrom="1"
-            )
 
         if self.create_mutation_check_file:
             phased_mutations_list = self.get_individuals_with_mutations(
                 ts_simplified,
                 target_mut_type_ids={self.slim_mutation_nr},
-                target_pop_name=self.tgt_id,
+                target_pop_name=self.pop_of_interest,
                 target_pop_id=None,
                 only_alive=True,
                 print_results=False,
@@ -368,19 +323,34 @@ class SlimSimulator(DataSimulator):
                 output_path=mut_tgt_file,
                 target_mut_types={self.slim_mutation_nr},
                 target_positions=None,
-                chrom=self.chromosome,
+                chrom="1",
             )
 
         return all_file_paths
+
+    def write_vcf_sample_list(self, vcf_path, output_file, population_label="p1"):
+        """
+        Extracts sample names from a VCF file and writes them to a file
+        with the format: <population_label>\t<sample_name>
+
+        Args:
+            vcf_path (str): Path to the VCF file.
+            population_label (str): Population label to prefix each sample.
+            output_file (str): Path to the output file to write the sample list.
+        """
+        # Read only sample names, no genotype fields
+        callset = allel.read_vcf(vcf_path)
+
+        sample_list = callset["samples"]
+
+        with open(output_file, "w") as f:
+            for sample in sample_list:
+                f.write(f"{population_label}\t{sample}\n")
 
     def perform_slim_simulation(
         self,
         file_paths: Dict[str, str],
         slim_script: str,
-        adm_time: int,
-        sel_time: int,
-        adm_amount: float,
-        dominance: str,
         rep: int,
     ) -> Dict[str, Any]:
         """
@@ -422,10 +392,13 @@ class SlimSimulator(DataSimulator):
         """
         simulation = {}
 
-        simulation["adm_time"] = adm_time
-        simulation["sel_time"] = sel_time
-        simulation["adm_amount"] = adm_amount
-        simulation["dominance"] = dominance
+        simulation["seq_length"] = self.seq_length
+        simulation["bottleneck_factor"] = self.bottleneck_factor
+        simulation["expansion_factor"] = self.expansion_factor
+        simulation["initial_sweep_frequency"] = self.initial_sweep_frequency
+        simulation["selection_coefficient"] = self.selection_coefficient
+        simulation["mutation_rate"] = self.basic_mut_rate
+        simulation["recombination_rate"] = self.recombination_rate
 
         output_file = file_paths["ts_file"]
         txt_file = file_paths["txt_file"]
@@ -434,6 +407,9 @@ class SlimSimulator(DataSimulator):
         simulation["output_file"] = output_file
         simulation["txt_file"] = txt_file
 
+        slim_vcf_file = file_paths["slim_vcf_file"]
+
+        
         sub_output = subprocess.run(
             [
                 "slim",
@@ -442,79 +418,34 @@ class SlimSimulator(DataSimulator):
                 "-d",
                 f'txt_path="{txt_file}"',
                 "-d",
-                f"adm_time={adm_time}",
+                f'output_vcf="{slim_vcf_file}"',
                 "-d",
-                f"sel_time={sel_time}",
+                f"seq_length={self.seq_length}",
                 "-d",
-                f"adm_amount={adm_amount}",
+                f"bottleneck_factor={self.bottleneck_factor}",
+                "-d",
+                f"expansion_factor={self.expansion_factor}",
+                "-d",
+                f"initial_sweep_frequency={self.initial_sweep_frequency}",
+                "-d",
+                f"selection_coefficient={self.selection_coefficient}",
+                "-d",
+                f"mutation_rate={self.basic_mut_rate}",
+                "-d",
+                f"recombination_rate={self.recombination_rate}",
+                "-d",
+                f"scaling_factor={self.scaling_factor}",
                 slim_script,
             ],
             capture_output=True,
             text=True,
         )
 
-        if "Finish due to no mutation of type 2" in sub_output.stdout:
-            simulation["mutation"] = False
-        else:
-            simulation["mutation"] = True
-
         simulation["output"] = sub_output
         simulation["rep"] = rep
 
+
         return simulation
-
-    def _create_ref_tgt_file_slim(
-        self,
-        ref_ind_file: str,
-        tgt_ind_file: str,
-        all_p_ref: List[int],
-        all_p_tgt: List[int],
-        pops: Dict[str, str],
-        identifier: str = "tsk_",
-        src_ind_file: Optional[str] = None,
-        all_p_src: Optional[List[int]] = None,
-    ) -> None:
-        """
-        Writes individual population assignment files for use in SLiM simulations.
-
-        Parameters
-        ----------
-        ref_ind_file : str
-            File path to write reference population individual IDs.
-        tgt_ind_file : str
-            File path to write target population individual IDs.
-        all_p_ref : list of int
-            List of reference population individual indices.
-        all_p_tgt : list of int
-            List of target population individual indices.
-        pops : dict of str
-            Dictionary mapping population roles ("ref", "tgt", optionally "src")
-            to population IDs used in SLiM.
-        identifier : str, optional
-            Prefix string to prepend to individual IDs (default is "tsk_").
-        src_ind_file : str, optional
-            File path to write source population individual IDs (if "src" in pops).
-        all_p_src : list of int, optional
-            List of source population individual indices (only used if "src" in pops).
-
-        Returns
-        -------
-        None
-            Writes files to disk, no return value.
-        """
-
-        with open(ref_ind_file, "w") as fref:
-            for ind in all_p_ref:
-                fref.write(f"{pops['ref']}\t{identifier}{ind}\n")
-
-        with open(tgt_ind_file, "w") as ftgt:
-            for ind in all_p_tgt:
-                ftgt.write(f"{pops['tgt']}\t{identifier}{ind}\n")
-
-        if "src" in pops:
-            with open(src_ind_file, "w") as fsrc:
-                for ind in all_p_src:
-                    fsrc.write(f"{pops['src']}\t{identifier}{ind}\n")
 
     def count_individuals(self, ts: tskit.TreeSequence) -> Dict[int, int]:
         """
@@ -1026,162 +957,6 @@ class SlimSimulator(DataSimulator):
         all_nodes_simplified = all_nodes_p_ref + all_nodes_p_tgt + all_nodes_p_src
 
         return ts_simplified, all_ps_simplified, all_p_ref, all_p_tgt, all_p_src
-
-    def get_introgressed_segments(
-        self,
-        ts: tskit.TreeSequence,
-        source_pop_name: str = "p2",
-        target_pop_name: str = "p4",
-        print_results: bool = False,
-    ) -> DefaultDict[int, DefaultDict[int, List[Tuple[float, float]]]]:
-        """
-        Identifies and returns genomic segments in the target population that have
-        been introgressed from a source population in a tree sequence.
-
-        Parameters
-        ----------
-        ts : tskit.TreeSequence
-            A tree sequence object with population and individual metadata.
-        source_pop_name : str, optional
-            The name of the source population (default is "p2").
-        target_pop_name : str, optional
-            The name of the target population (default is "p4").
-        print_results : bool, optional
-            Whether to print the results to stdout (default is False).
-
-        Returns
-        -------
-        merged_introgression : defaultdict
-            Nested dictionary where:
-                - keys are individual IDs from the target population,
-                - values are dictionaries mapping haplotype index (0 or 1)
-                to a list of (start, end) tuples indicating introgressed genomic segments.
-
-        Raises
-        ------
-        ValueError
-            If the source or target population cannot be found by name.
-
-        Notes
-        -----
-        A genomic segment is considered introgressed if, in any tree, a sample node
-        from the target population descends from a parent node in the source population.
-        This is assessed per haplotype (node) of each individual.
-
-        Contiguous or overlapping introgressed segments are merged for clarity.
-        """
-
-        # Get population ID by name
-        def get_pop_id_by_name(ts, name):
-            for pop in ts.populations():
-                if pop.metadata and isinstance(pop.metadata, dict):
-                    if pop.metadata.get("name") == name:
-                        return pop.id
-            return None
-
-        source_pop_id = get_pop_id_by_name(ts, source_pop_name)
-        target_pop_id = get_pop_id_by_name(ts, target_pop_name)
-
-        if source_pop_id is None or target_pop_id is None:
-            raise ValueError("Could not find source or target population by name.")
-
-        # Precompute node populations
-        node_pop = [node.population for node in ts.nodes()]
-        sample_set = set(ts.samples())
-
-        # Precompute target individuals
-        target_inds = [
-            (ind.id, ind.nodes)
-            for ind in ts.individuals()
-            if ind.population == target_pop_id
-        ]
-
-        # Store introgressed segments: [ind_id][hap_index] = list of (start, end)
-        introgressed_segments = defaultdict(lambda: defaultdict(list))
-
-        for tree in ts.trees():
-            start, end = tree.interval
-            get_parent = tree.parent
-
-            for ind_id, nodes in target_inds:
-                for hap_index, node_id in enumerate(nodes):
-                    if node_id not in sample_set:
-                        continue
-
-                    current = node_id
-                    while True:
-                        parent = get_parent(current)
-                        if parent == tskit.NULL:
-                            break
-
-                        if (
-                            node_pop[current] == target_pop_id
-                            and node_pop[parent] == source_pop_id
-                        ):
-                            introgressed_segments[ind_id][hap_index].append(
-                                (start, end)
-                            )
-                            break
-
-                        current = parent
-
-        # Merge contiguous/overlapping intervals
-        def merge_intervals(intervals):
-            if not intervals:
-                return []
-            intervals.sort()
-            merged = []
-            current_start, current_end = intervals[0]
-            for start, end in intervals[1:]:
-                if start <= current_end:
-                    current_end = max(current_end, end)
-                else:
-                    merged.append((current_start, current_end))
-                    current_start, current_end = start, end
-            merged.append((current_start, current_end))
-            return merged
-
-        # Merge results
-        merged_introgression = defaultdict(lambda: defaultdict(list))
-        for ind_id, hap_data in introgressed_segments.items():
-            for hap_index, intervals in hap_data.items():
-                merged_introgression[ind_id][hap_index] = (
-                    merge_intervals(intervals) if len(intervals) > 1 else intervals
-                )
-
-        if print_results:
-            print(
-                f"\n--- Introgressed segments from {source_pop_name} into {target_pop_name} ---"
-            )
-            for ind_id, hap_data in merged_introgression.items():
-                print(f"Individual {ind_id}:")
-                for hap, segs in hap_data.items():
-                    if segs:
-                        for start, end in segs:
-                            print(f"  Haplotype {hap}: {start:.1f} - {end:.1f}")
-                    else:
-                        print(f"  Haplotype {hap}: No introgressed segments detected.")
-
-            return merged_introgression
-
-    def write_introgressed_segments_to_tsv(
-        self, merged_introgression, output_path, chrom="1"
-    ):
-        """
-        Writes merged introgressed segments to a tab-separated file.
-
-        Parameters:
-        - merged_introgression: dict[individual_id][haplotype] -> list of (start, end)
-        - chrom: int, chromosome number
-        - output_path: str, path to the output TSV file
-        """
-        with open(output_path, "w", newline="") as f:
-            writer = csv.writer(f, delimiter="\t")
-            for ind_id, hap_data in merged_introgression.items():
-                for hap_index, intervals in hap_data.items():
-                    label = f"{ind_id}_{hap_index}"
-                    for start, end in intervals:
-                        writer.writerow([chrom, int(start), int(end), label])
 
     def write_filtered_mutation_sites_to_tsv(
         self,

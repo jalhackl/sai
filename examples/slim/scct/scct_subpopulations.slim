@@ -1,0 +1,260 @@
+initialize() {	
+
+	 if (!exists("output_path")) {
+        defineConstant("output_path", "scct_structure_sampling.trees");
+    }
+    
+    if (!exists("output_vcf")) {
+        defineConstant("output_vcf", "scct_structure_sampling.vcf");
+    }
+    
+    if (!exists("txt_path")) {
+        defineConstant("txt_path", "scct_structure_sampling.txt");
+    }
+    
+
+    
+    if (!exists("seq_length")) {
+        defineConstant("seq_length", 3000000);
+    }
+    
+    if (!exists("scaling_factor")) {
+        defineConstant("scaling_factor", 10);
+    }
+    
+    if (!exists("total_generations_unscaled")) {
+        defineConstant("total_generations_unscaled", 25000);
+    }
+    
+    
+    if (!exists("bottleneck_factor")) {
+        defineConstant("bottleneck_factor", 1);
+    }
+    
+        
+    if (!exists("expansion_factor")) {
+        defineConstant("expansion_factor", 1);
+    }
+    
+    
+    //for hard sweeps: 0.00001
+    //for soft sweeps: [0.01, 0.001, 0.0001, 0.00001]
+    if (!exists("initial_sweep_frequency")) {
+        defineConstant("initial_sweep_frequency", 0.0001);
+    }
+    
+    
+    //for hard sweeps: range[0.00125, 0.005] (given by Scaled range[500,2000], divided by 4*Ne, Ne = 100000)
+    // look also at Scaled 1350
+    //for soft sweeps: 0.00325 (given by Scaled 1350)
+    if (!exists("selection_coefficient")) {
+        defineConstant("selection_coefficient", 0.00325);
+    }
+    
+    if (!exists("mutation_rate")) {
+        defineConstant("mutation_rate", 1.5e-8);
+    }
+    
+    if (!exists("recombination_rate")) {
+        defineConstant("recombination_rate", 1.35e-8);
+    }
+    
+    if (!exists("samplings")) {
+        defineConstant("samplings", 3);
+    }
+    
+    defineConstant("total_generations", asInteger(total_generations_unscaled / scaling_factor));
+        
+    print("Relevant parameters: ");
+
+    print("output_path: " + output_path);
+    print("txt_path: " + txt_path);
+    
+
+	initializeSLiMOptions(keepPedigrees = T);
+
+	initializeTreeSeq();
+	
+	initializeMutationRate(mutation_rate * scaling_factor);
+	initializeRecombinationRate(0.5*(1-(1-2*recombination_rate)^scaling_factor));
+	
+	initializeMutationType("m1", 0.5, "f", 0.0);
+	initializeMutationType("m2", 0.5, "f", asInteger(selection_coefficient * scaling_factor));    // introduced mutation
+	m2.convertToSubstitution = F;
+	
+	initializeGenomicElementType("g1", m1, 1.0);
+	initializeGenomicElement(g1, 0, seq_length-1);
+	
+	african_expansion_generations = asInteger(17000 / scaling_factor);
+	african_agriculture_generations = asInteger(200 / scaling_factor);
+	
+	ooA_generations = asInteger(3500 / scaling_factor);
+	
+	african_expansion_time_value = total_generations - african_expansion_generations;
+	african_agriculture_time_value = total_generations - african_agriculture_generations;
+	
+	ooA_time_value = total_generations - ooA_generations;
+	
+	defineConstant("african_expansion_time", african_expansion_time_value);
+	defineConstant("african_agriculture_time", african_agriculture_time_value);
+	defineConstant("ooA_time", ooA_time_value);
+
+	//additional scct-parameters
+	
+	// sweep 
+	sweep_start_generations = asInteger(2000 / scaling_factor);
+	sweep_start_time_value = total_generations - sweep_start_generations;
+	
+	defineConstant("sweep_start_time", sweep_start_time_value);
+	
+	// bottleneck
+	bottleneck_start_generations = asInteger(3500 / scaling_factor);
+	bottleneck_end_generations = asInteger(2500 / scaling_factor);
+	bottleneck_start_time_value = total_generations - bottleneck_start_generations;
+	bottleneck_end_time_value = total_generations - bottleneck_end_generations;
+	
+	defineConstant("bottleneck_start_time", bottleneck_start_time_value);
+	defineConstant("bottleneck_end_time", bottleneck_end_time_value);
+	
+	bottleneck_duration = bottleneck_end_time_value - bottleneck_start_time_value;
+	
+	// expansion (and population structure)
+	expansion_start_generations = asInteger(1000 / scaling_factor);
+	expansion_start_time_value = total_generations - expansion_start_generations;
+	
+	defineConstant("expansion_start_time", expansion_start_time_value);
+	// population structure
+
+
+}
+
+// p1 is ancestral
+1 early() {
+	sim.addSubpop("p1", asInteger(12500 / scaling_factor)); 
+
+
+}
+
+//ancestral becomes african
+african_expansion_time early() { 
+//sim.addSubpopSplit("p2", 24000 , p1); 
+p1.setSubpopulationSize(asInteger(24000 / scaling_factor)); 
+//p1.setSubpopulationSize(0); 
+} 
+
+//out of africa starts, not relevant for now
+ooA_time early() { 
+
+sim.addSubpopSplit("p6", asInteger(7700 / scaling_factor), p1); 
+
+
+} 
+
+ooA_time late() { 
+
+
+} 
+
+
+
+bottleneck_start_time early() {
+
+p1.setSubpopulationSize(asInteger(p1.individualCount * bottleneck_factor)); 
+
+
+}
+
+
+
+sweep_start_time early() {
+
+target = sample(p1.genomes, asInteger(initial_sweep_frequency * p1.individualCount * 2 * scaling_factor)); //fix it 
+
+target.addNewDrawnMutation(m2, asInteger(seq_length / 2)); 
+
+}
+
+
+expansion_start_time early() {
+
+
+
+p1.setSubpopulationSize(asInteger(p1.individualCount * expansion_factor)); 
+
+
+//additional for population structure
+sim.addSubpopSplit("p2", asInteger(p1.individualCount * 0.25), p1); 
+sim.addSubpopSplit("p3", asInteger(p1.individualCount * 0.25), p1); 
+sim.addSubpopSplit("p4", asInteger(p1.individualCount * 0.25), p1); 
+sim.addSubpopSplit("p5", asInteger(p1.individualCount * 0.25), p1); 
+p1.setSubpopulationSize(0);
+
+
+p5.setSubpopulationSize(asInteger(p5.individualCount * expansion_factor)); 
+
+
+}
+
+
+
+
+
+african_agriculture_time early() { 
+
+print("starting agriculture");
+//p1.setSubpopulationSize(asInteger(100000 / scaling_factor)); 
+} 
+
+
+
+
+total_generations early() { 
+
+
+
+print("last generation");
+
+} 
+
+
+
+total_generations late() { 
+
+for (sampling_index in 1:samplings){
+		
+		pop_sample_size = asInteger(120 / 4);
+		
+		sample1 = p2.sampleIndividuals(pop_sample_size).genomes;
+		sample2 = p3.sampleIndividuals(pop_sample_size).genomes;
+		sample3 = p4.sampleIndividuals(pop_sample_size).genomes;
+		sample4 = p5.sampleIndividuals(pop_sample_size).genomes;
+		all_samples =  c(sample1, sample2, sample3, sample4);
+
+		//one possibility to directly create VCF
+		//g = p1.sampleIndividuals(120).genomes;
+		all_samples.outputVCF(filePath=asString(sampling_index) + "_" + output_vcf, simplifyNucleotides=T);
+		
+		//another possibility
+		//p1.outputVCFSample(sampleSize=120, filePath=asString(sampling_index) + "_" + output_vcf);
+
+	}
+
+//optional tree output
+/*
+g = p1.sampleIndividuals(120).genomes;
+g.outputVCF(filePath="final_outputvcf.vcf", simplifyNucleotides=T);
+
+sim.treeSeqRememberIndividuals(sample(p1.individuals, 120)); 
+p1.outputVCFSample(sampleSize=120, filePath="final_sample.vcf");
+
+
+sim.treeSeqOutput("tree_before_zero.trees"); 
+p1.setSubpopulationSize(0);
+
+
+sim.treeSeqOutput(output_path); 
+*/
+
+} 
+
+
