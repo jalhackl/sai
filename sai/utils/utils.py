@@ -137,9 +137,9 @@ def read_geno_data(
             region=region,  # Specify the chromosome region
             tabix=None,
         )
+
     except Exception as e:
         raise ValueError(f"Failed to read VCF file {vcf} from {region}: {e}") from e
-    
 
     # Convert genotype data to a more efficient GenotypeArray
     if vcf_data is None:
@@ -156,6 +156,7 @@ def read_geno_data(
 
     # Load ancestral allele data if provided
     if anc_allele_file:
+
         anc_alleles = read_anc_allele(
             anc_allele_file=anc_allele_file,
             chr_name=chr_name,
@@ -163,6 +164,7 @@ def read_geno_data(
             end=end,
         )
     else:
+
         anc_alleles = None
 
     sample_indices = [all_samples.index(s) for s in all_samples]
@@ -183,6 +185,7 @@ def read_geno_data(
 
     # Check and incorporate ancestral alleles if the file is provided
     if anc_alleles:
+
         chrom_data = check_anc_allele(chrom_data, anc_alleles, chr_name)
 
     return chrom_data, vcf_data.get("samples"), ploidy
@@ -323,9 +326,9 @@ def read_data(
     if src_samples:
         all_samples.update(src_samples)
 
-
     try:
         # Read VCF data
+
         geno_data, all_samples, ploidy = read_geno_data(
             vcf=vcf_file,
             ind_samples=all_samples,
@@ -337,7 +340,6 @@ def read_data(
         )
     except Exception as e:
         raise ValueError(f"Failed to read VCF data: {e}")
-    
 
     if geno_data is None:
         return None, ref_samples, None, tgt_samples, None, src_samples, None
@@ -608,6 +610,7 @@ def flip_snps(data: dict[str, ChromosomeData], flipped_snps: list[int]) -> None:
 
     # Flip all genotypes at once where the mask is True
     data.GT[is_flipped] = allel.GenotypeArray(abs(data.GT[is_flipped] - 1))
+
 
 def split_genome(
     pos: np.ndarray,

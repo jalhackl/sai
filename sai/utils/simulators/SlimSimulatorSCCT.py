@@ -302,7 +302,7 @@ class SlimSimulatorSCCT(DataSimulator):
                 indivlist.append(i)
 
         with open(file_paths["vcf_file"], "w") as vcffile:
-            ts_simplified.write_vcf(vcffile, individuals=indivlist)
+            ts_simplified.write_vcf(vcffile, individuals=indivlist, allow_position_zero=True)
         self.write_vcf_sample_list(
             vcf_path=file_paths["vcf_file"],
             output_file=file_paths["ind_file"],

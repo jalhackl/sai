@@ -30,6 +30,7 @@ from sai.utils.generators import SaiWindowDataGenerator
 from sai.utils.preprocessors import SaiFeatureVectorsPreprocessor
 
 from sai.utils.preprocessors import SaiLRPreprocessor
+from sai.utils.preprocessors import SaiStatPreprocessor
 
 
 def lr_preprocess(
@@ -230,6 +231,97 @@ def Sai_lr_preprocess(
     return df_res
 
 
+def Sai_lr_process_folder_StatProcessor(
+    vcf_location: str,
+    feature_config,
+    output_dir,
+    ref_ind_file=None,
+    tgt_ind_file=None,
+    src_ind_file=None,
+    chr_name="1",
+    win_len=50000,
+    win_step=10000,
+    nprocess=1,
+    vcf_ending=".vcf.gz",
+    sample_file_suffix="ind.list",
+    num_src=1,
+    anc_allele_file=None,
+) -> None:
+    """
+    apply SAI feature computation to all files of a location (including subfolders)
+
+    Preprocess VCF files and run the UNet data preprocessing simulation.
+
+    This function processes a VCF file or a directory containing VCF files,
+    and then uses the `SaiLRPreprocessor` to prepare data for further processing
+    or simulation.
+
+    Parameters
+    ----------
+    vcf_location : str
+        Path to a VCF file or directory containing VCF files.
+    feature_config : dict
+        Configuration dictionary specifying which statistics or features to compute.
+    output_dir : str
+        Directory where the output files will be saved.
+    ref_ind_file : str, optional
+        Path to the reference individuals list file.
+    tgt_ind_file : str, optional
+        Path to the target individuals list file.
+    src_ind_file : str, optional
+        Path to the source individuals list file.
+    chr_name : str, optional
+        Chromosome name, by default "1".
+    win_len : int, optional
+        Window length for computing statistics, by default 50,000 bp.
+    win_step : int, optional
+        Step size between consecutive windows, by default 10,000 bp.
+    nprocess : int, optional
+        Number of parallel processes to use, by default 1.
+    vcf_ending : str, optional
+        File suffix for VCF files, by default ".vcf.gz".
+    sample_file_suffix : str, optional
+        Suffix used for sample list files, by default "ind.list".
+    num_src : int, optional
+        Number of source populations or individuals, by default 1.
+    anc_allele_file : str, optional
+        Path to ancestral allele file, if available.
+
+
+
+    """
+
+    simulator = SaiStatPreprocessor(
+        chr_name=chr_name,
+        ref_ind_file=ref_ind_file,
+        tgt_ind_file=tgt_ind_file,
+        src_ind_file=src_ind_file,
+        win_len=win_len,
+        win_step=win_step,
+        feature_config=feature_config,
+        output_dir=output_dir,
+        num_src=num_src,
+        anc_allele_file=anc_allele_file,
+        num_workers=nprocess,
+    )
+
+    generator = FileGenerator(
+        file_location=vcf_location,
+        file_ending=vcf_ending,
+        return_rep=False,
+        only_one_type=False,
+        sample_file_suffix=sample_file_suffix,
+    )
+
+    all_res = mp_manager(
+        job=simulator,
+        data_generator=generator,
+        nprocess=nprocess,
+    )
+
+    return all_res
+
+
 def Sai_lr_process_folder(
     vcf_location: str,
     feature_config,
@@ -243,52 +335,39 @@ def Sai_lr_process_folder(
     nprocess=1,
     label_data=True,
     vcf_ending=".vcf.gz",
+    sample_file_suffix="ind.list",
 ) -> None:
     """
-    Preprocess VCF files and run the UNet data preprocessing simulation.
-
-    This function processes a VCF file or a directory containing VCF files,
-    and then uses the `SaiLRPreprocessor` to prepare data for further processing
-    or simulation.
+    apply SAI feature computation to all files of a location (including subfolders)
 
     Parameters
     ----------
     vcf_location : str
         Path to a VCF file or directory containing VCF files.
-    ploidy : int
-        The ploidy value to be used in the simulation.
-    output_prefix : str
-        Prefix to be used for the output files.
+    feature_config : dict
+        Configuration dictionary specifying which features to extract or compute.
     output_dir : str
         Directory where the output files will be saved.
-    output_h5 : bool
-        If True, the output will be saved in HDF5 format.
-    is_phased : bool
-        If True, the VCF file is assumed to be phased.
-    is_sorted : bool
-        If True, the VCF file is assumed to be sorted.
-    num_polymorphisms : int
-        The number of polymorphisms to be used in the simulation.
-    num_upsamples : int
-        The number of upsample iterations to perform.
-    nprocess : int
-        The number of processes to run in parallel.
-    chunk_size : int
-        The chunk size for processing HDF5 files.
-    step_size : int
-        The step size for processing the VCF file.
-
-    Raises
-    ------
-    SystemExit
-        If the provided `vcf_location` is neither a valid file nor a directory.
-
-    Returns
-    -------
-    None
-        This function does not return any value. It performs data processing and
-        manages parallelization.
-
+    ref_ind_file : str, optional
+        Path to the reference individuals list file.
+    tgt_ind_file : str, optional
+        Path to the target individuals list file.
+    src_ind_file : str, optional
+        Path to the source individuals list file.
+    chr_name : str, optional
+        Chromosome name, by default "1".
+    win_len : int, optional
+        Window length for feature extraction, by default 50,000 bp.
+    win_step : int, optional
+        Step size between consecutive windows, by default 10,000 bp.
+    nprocess : int, optional
+        Number of parallel processes to use, by default 1.
+    label_data : bool, optional
+        Whether to label the generated data, by default True.
+    vcf_ending : str, optional
+        File suffix for VCF files, by default ".vcf.gz".
+    sample_file_suffix : str, optional
+        Suffix used for sample list files, by default "ind.list".
 
     """
 
@@ -305,8 +384,13 @@ def Sai_lr_process_folder(
         label_data=label_data,
     )
 
-    # generator = FileGenerator(file_location=vcf_location, file_ending=".vcf.gz")
-    generator = FileGenerator(file_location=vcf_location, file_ending=vcf_ending)
+    generator = FileGenerator(
+        file_location=vcf_location,
+        file_ending=vcf_ending,
+        return_rep=False,
+        only_one_type=False,
+        sample_file_suffix=sample_file_suffix,
+    )
 
     all_res = mp_manager(
         job=simulator,

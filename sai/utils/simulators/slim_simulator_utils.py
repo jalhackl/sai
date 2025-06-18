@@ -388,7 +388,7 @@ def write_annotated_vcf(
     out_path = f"{filename}_combined.vcf"
 
     with open(raw_path, "w") as f:
-        ts.write_vcf(f, contig_id=chrom)
+        ts.write_vcf(f, contig_id=chrom,allow_position_zero=True)
 
     with open(raw_path) as fin, open(out_path, "w") as fout:
         for line in fin:
@@ -550,7 +550,7 @@ def only_add_maladapt_mutations(
 
     if write_vcf and filename:
         with open(filename, "w") as f:
-            ts_sample.write_vcf(f, contig_id=chromsome)
+            ts_sample.write_vcf(f, contig_id=chromosome, allow_position_zero=True)
 
     if save_trees:
         tree_path = f"{filename}_added.trees"

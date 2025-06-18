@@ -43,7 +43,7 @@ class WindowGenerator(DataGenerator):
         end: int = None,
         anc_allele_file: str = None,
         num_src: int = 1,
-        is_phased: bool = False
+        is_phased: bool = False,
     ):
         """
         Initializes a new instance of WindowGenerator.

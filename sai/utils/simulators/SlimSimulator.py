@@ -240,7 +240,7 @@ class SlimSimulator(DataSimulator):
         os.makedirs(output_dir, exist_ok=True)
         ts_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.ts")
         txt_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.txt")
-        vcf_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.vcf.gz")
+        vcf_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.vcf")
         bed_file = os.path.join(output_dir, f"{output_prefix}.true.tracts.bed")
         ref_ind_file = os.path.join(output_dir, f"{output_prefix}.ref.ind.list")
         tgt_ind_file = os.path.join(output_dir, f"{output_prefix}.tgt.ind.list")
@@ -326,6 +326,7 @@ class SlimSimulator(DataSimulator):
                 vcf_file,
                 individuals=all_ps_simplified,
                 individual_names=[self.identifier + str(x) for x in all_ps_simplified],
+                allow_position_zero=True
             )
 
         # create sample files

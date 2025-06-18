@@ -1,0 +1,280 @@
+initialize() {	
+
+	 if (!exists("output_path")) {
+        defineConstant("output_path", "trees_racimonosel.trees");
+    }
+    
+    if (!exists("txt_path")) {
+        defineConstant("txt_path", "text_raximonosel.txt");
+    }
+    
+    if (!exists("adm_amount")) {
+        defineConstant("adm_amount", 0.2);
+    }
+    
+    
+    if (!exists("seq_length")) {
+        defineConstant("seq_length", 40000);
+    }
+    
+    if (!exists("scaling_factor")) {
+        defineConstant("scaling_factor", 10);
+    }
+    
+    if (!exists("total_generations_unscaled")) {
+        defineConstant("total_generations_unscaled", 17000);
+    }
+    
+    if (!exists("pop_size")) {
+        defineConstant("pop_size", 10000);
+    }
+    
+    if (!exists("selection_coefficient")) {
+        defineConstant("selection_coefficient", 0.1);
+    }
+    
+    if (!exists("mutation_rate")) {
+        defineConstant("mutation_rate", 1.5e-8);
+    }
+    
+        
+    if (!exists("recombination_rate")) {
+        defineConstant("recombination_rate", 1e-8);
+    }
+    
+    //initial_frequency = 0 means 1 chromosome (in one individual)
+    if (!exists("initial_frequency")) {
+        defineConstant("initial_frequency", 0);
+    }
+    
+    if (!exists("slim_archaic_sample_generations_unscaled")) {
+        defineConstant("slim_archaic_sample_generations_unscaled", 1500);
+    }
+    
+    if (!exists("nea_archaic_sample_size")) {
+        defineConstant("nea_archaic_sample_size", 1);
+    }
+    
+        
+    print("Relevant parameters: ");
+    print("adm_amount: " + adm_amount);
+    //print("adm_time: " + adm_time);
+    //print("sel_time: " + sel_time);
+    print("output_path: " + output_path);
+    
+
+	initializeSLiMOptions(keepPedigrees = T);
+
+	initializeTreeSeq(timeUnit="generations");
+
+	
+	initializeMutationRate(mutation_rate * scaling_factor);
+	initializeMutationType("m1", 0.5, "f", 0.0);
+	initializeMutationType("m2", 1.0, "f", asFloat(selection_coefficient * scaling_factor));    // introduced mutation
+	m2.convertToSubstitution = F;
+	
+	initializeGenomicElementType("g1", m1, 1.0);
+	initializeGenomicElement(g1, 0, seq_length-1);
+	initializeRecombinationRate(0.5*(1-(1-2*recombination_rate)^scaling_factor));
+	
+	defineConstant("total_generations", asInteger(total_generations_unscaled / scaling_factor));
+	
+	african_eurasian_split_generations = asInteger(4000 / scaling_factor);
+	nea_modern_split_generations = asInteger(16000 / scaling_factor);
+	
+	african_eurasian_split_time_value = total_generations - african_eurasian_split_generations;
+	nea_modern_split_time_value = total_generations - nea_modern_split_generations;
+	
+	admixture_generations = asInteger(1600 / scaling_factor);
+	selection_generations = asInteger(15000 / scaling_factor);
+	
+	
+	admixture_time_value = total_generations - admixture_generations;
+	selection_time_value = total_generations - selection_generations;
+	
+	defineConstant("african_eurasian_split_time", african_eurasian_split_time_value);
+	defineConstant("nea_modern_split_time", nea_modern_split_time_value);
+	defineConstant("admixture_time", admixture_time_value);
+	defineConstant("selection_time", selection_time_value);
+	
+	
+	slim_archaic_sample_generations = asInteger(slim_archaic_sample_generations_unscaled / scaling_factor);
+	slim_archaic_sample_time_value = total_generations - slim_archaic_sample_generations;
+	defineConstant("nea_sample_time", slim_archaic_sample_time_value);
+
+}
+
+// create a population of pop_size individuals
+1 early() {
+	sim.addSubpop("p1", asInteger(pop_size / scaling_factor)); 
+
+	//sim.treeSeqRememberIndividuals(sim.subpopulations.individuals);
+	
+}
+
+nea_modern_split_time early() { 
+sim.addSubpopSplit("p2", asInteger(pop_size / scaling_factor), p1); 
+} 
+
+
+selection_time-1 late() { 
+sim.treeSeqOutput(output_path); 
+} 
+
+
+selection_time late() { 
+
+if (initial_frequency == 0){
+	target = sample(p2.genomes, asInteger(1)); //fix it 
+}
+else{
+target = sample(p2.genomes, asInteger(initial_frequency * p2.individualCount * 2)); //fix it 
+}
+target.addNewDrawnMutation(m2, asInteger(seq_length / 2)); 
+
+sim.outputMutations(sim.mutationsOfType(m2)); 
+
+} 
+
+
+(selection_time+2):admixture_time late(){
+
+    muts = sim.mutationsOfType(m2);
+    muts_frequencies = sim.mutationFrequencies(p2, sim.mutationsOfType(m2));
+
+    //if (size(muts) != 1) {
+    if (selection_coefficient !=0){
+    
+    //first, we check whether the mutation is present
+    if (size(muts) != 1){
+    	mutation_present = 0;
+    	//print("mutation not present anymore");
+    }
+    else{
+      mutation_present = 1;
+    }
+    
+    
+    if (mutation_present == 0) {
+
+        //cat("RESTART \n");
+        print("RETRY because not present");
+		  setSeed(getSeed() + 1); 
+
+       sim.readFromPopulationFile(output_path);
+
+
+        
+    }
+    else{
+    //print("still present");
+    //print(sim.cycle);
+    //print("presence of mutation of type 2, frequency: " + asString(muts_frequencies));
+
+    
+    }
+}
+}
+
+
+african_eurasian_split_time early(){
+//print("African eur split happening");
+//print(sim.cycle);
+sim.addSubpopSplit("p4", asInteger(pop_size / scaling_factor), p1); 
+
+}
+
+
+admixture_time late(){
+//print("check if mutation present and fixed");
+//print(sim.cycle);
+    muts = sim.mutationsOfType(m2);
+    muts_frequencies = sim.mutationFrequencies(p2, sim.mutationsOfType(m2));
+
+    //if (size(muts) != 1) {
+    
+    //first, we check whether the mutation is present
+    
+    if (selection_coefficient !=0){
+    if (size(muts) != 1){
+    	mutation_present = 0;
+    	//print("mut not present");
+    }
+    else{
+      mutation_present = 1;
+    }
+    // then we check if it is fixed
+    if (mutation_present == 1){
+     if (muts_frequencies < 1){
+       mutation_fixed = 0;
+       //print("currfrequency not fixed: " + asString(muts_frequencies));
+     }
+     else {
+       mutation_fixed = 1;
+       //print("currfrequency not fixed: " + asString(muts_frequencies));
+     }
+    }
+    else {
+    mutation_fixed = 0;
+    }
+    
+    if (mutation_fixed == 0) {
+
+    	  
+    	  print("Finish due to no fixation of mutation of type 2, frequency: " + asString(muts_frequencies));
+
+        //cat("RESTART \n");
+        print("RETRY because not fixed");
+		  setSeed(getSeed() + 1); 
+
+       sim.readFromPopulationFile(output_path);
+
+        
+    }
+    else{
+    //print("mutation fixed, continue!");
+    //print(sim.cycle);
+    p4.setMigrationRates(c(p1,p2), c(0.0, adm_amount)); 
+
+    }
+}
+//in case of no selection, we also simulate admixture
+else{
+print("no selection, but admixture");
+p4.setMigrationRates(c(p1,p2), c(0.0, adm_amount)); 
+}
+//for now, we do not need tracts etc.
+//sim.treeSeqRememberIndividuals(sim.subpopulations.individuals); 
+} 
+
+admixture_time+1 late() { 
+p4.setMigrationRates(c(p1,p2), c(0.0, 0.0)); 
+
+} 
+
+//Neanderthal sample 
+nea_sample_time early(){
+sim.treeSeqRememberIndividuals(sample(p2.individuals, nea_archaic_sample_size)); 
+
+}
+
+
+
+total_generations late() { 
+
+print(sim.mutationFrequencies(p4, sim.mutationsOfType(m2))); 
+
+//we did before
+//sim.treeSeqRememberIndividuals(sample(p2.individuals, p2.individualCount)); 
+
+
+sim.outputMutations(sim.mutationsOfType(m2)); 
+cat("Frequencies: "); 
+print(sim.mutationFrequencies(p2, sim.mutationsOfType(m2))); 
+print(sim.mutationFrequencies(p4, sim.mutationsOfType(m2))); 
+
+sim.treeSeqOutput(output_path); 
+
+
+} 
+

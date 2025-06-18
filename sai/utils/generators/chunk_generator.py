@@ -61,6 +61,7 @@ class ChunkGenerator(DataGenerator):
         ValueError
             If the specified chromosome is not found in the VCF file.
         """
+
         with pysam.VariantFile(vcf_file) as vcf:
             first_pos = last_pos = None
             for rec in vcf:
