@@ -23,3 +23,4 @@ from .MsprimeSimulator import MsprimeSimulator
 from .LRTrainingDataSimulator import LRTrainingDataSimulator
 from .SlimSimulator import SlimSimulator
 from .SlimSimulatorSCCT import SlimSimulatorSCCT
+from .SlimSimulatorRacimo import SlimSimulatorRacimo
