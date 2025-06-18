@@ -34,3 +34,5 @@ from .saifeature_preprocessor import SaiFeaturePreprocessor
 from .SaiLRPreprocessor import SaiLRPreprocessor
 from .SaiFeatureVectorsPreprocessor import SaiFeatureVectorsPreprocessor
 
+from .SaiStatPreprocessor import SaiStatPreprocessor
+

@@ -102,12 +102,14 @@ class SaiChunkPreprocessor(DataPreprocessor):
 
         anc_allele_available = anc_allele_file is not None
 
+
         self.mut_file = mut_file
 
         self.feature_preprocessor = SaiFeaturePreprocessor(
             output_file=output_file,
             feature_config=feature_config,
             anc_allele_available=anc_allele_available,
+            mut_file=self.mut_file
         )
 
 
@@ -151,6 +153,7 @@ class SaiChunkPreprocessor(DataPreprocessor):
 
 
         for item in window_generator.get():
+
             new_item = self.feature_preprocessor.run(**item)
             if new_item:
                 items.extend(new_item)

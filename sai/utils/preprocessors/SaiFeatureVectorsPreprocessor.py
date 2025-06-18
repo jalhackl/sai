@@ -19,6 +19,7 @@
 
 
 import yaml
+import json
 import numpy as np
 from typing import Any
 from sai.utils import parse_ind_file
@@ -160,39 +161,40 @@ class SaiFeatureVectorsPreprocessor(DataPreprocessor):
             if not callable(func):
                 continue
 
-            sig = inspect.signature(func)
-            call_args = {}
+            yaml_param_list = yaml_params if isinstance(yaml_params, list) else [yaml_params]
 
-            if isinstance(yaml_params, dict):
-                call_args.update(yaml_params)
-            elif isinstance(yaml_params, bool):
-                if not yaml_params:
-                    continue
-                # Else: proceed with just context-based parameters
-            else:
-                raise ValueError(
-                    f"Unsupported value type for feature '{func_name}': {type(yaml_params)}"
-                )
+            for single_params in yaml_param_list:
+                if isinstance(single_params, bool):
+                    if not single_params:
+                        continue
+                    single_params = {}
+                elif not isinstance(single_params, dict):
+                    raise ValueError(f"Unsupported parameter format for {func_name}: {single_params}")
 
-            for param in sig.parameters.values():
-                name = param.name
+                sig = inspect.signature(func)
+                call_args = {}
 
-                if name in call_args:
-                    continue
-                if name == "gts" and "tgt_gts" in basic_params:
-                    call_args["gts"] = basic_params["tgt_gts"]
-                elif name in basic_params:
-                    call_args[name] = basic_params[name]
+                call_args.update(single_params)
 
-            res = func(**call_args)
+                for param in sig.parameters.values():
+                    name = param.name
+                    if name in call_args:
+                        continue
+                    if name == "gts" and "tgt_gts" in basic_params:
+                        call_args["gts"] = basic_params["tgt_gts"]
+                    elif name in basic_params:
+                        call_args[name] = basic_params[name]
 
-            if isinstance(res, tuple):
-                for i, value in enumerate(res):
-                    key = f"{func_name}|val{i}|{yaml_params}"
-                    items[key] = value
-            else:
-                key = f"{func_name}|{yaml_params}"
-                items[key] = res
+                res = func(**call_args)
+
+                param_str = json.dumps(single_params, sort_keys=True)
+                if isinstance(res, tuple):
+                    for i, value in enumerate(res):
+                        key = f"{func_name}|val{i}|{param_str}"
+                        items[key] = value
+                else:
+                    key = f"{func_name}|{param_str}"
+                    items[key] = res
 
         # number of snps as column
         items["nsnps"] = tgt_gts.shape[0]

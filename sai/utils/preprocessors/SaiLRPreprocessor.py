@@ -49,7 +49,9 @@ class SaiLRPreprocessor:
 
         self.label_data = label_data
 
-    def run(self, file_info: dict):
+    def run(self, **kwargs):
+        file_info = kwargs
+
         vcf_file = file_info["vcf_file"]
         rep = file_info.get("rep", None)
 
@@ -58,9 +60,6 @@ class SaiLRPreprocessor:
         self.tgt_ind_file = file_info.get("tgt_ind_file", self.tgt_ind_file)
         self.src_ind_file = file_info.get("src_ind_file", self.src_ind_file)
         self.anc_allele_file = file_info.get("mut_file", self.anc_allele_file)
-
-        if self.nprocess <= 0:
-            raise ValueError("Number of processes must be greater than 0.")
 
         generator = SaiWindowDataGenerator(
             vcf_file=vcf_file,
@@ -90,6 +89,7 @@ class SaiLRPreprocessor:
             raise SystemExit("Some errors occurred, stopping the program ...")
 
         res.sort(key=lambda x: (x["Chromosome"], x["Start"], x["End"]))
+        #res.sort(key=lambda x: (x["chr_name"], x["start"], x["end"]))
         df_res = pd.DataFrame(res)
 
         os.makedirs(self.output_dir, exist_ok=True)

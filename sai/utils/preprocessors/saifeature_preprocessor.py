@@ -58,8 +58,6 @@ class SaiFeaturePreprocessor(DataPreprocessor):
             self.features = features
             if not self.features:
                 raise ValueError("No features found in the configuration.")
-
-            print(self.features)
         except FileNotFoundError:
             raise FileNotFoundError(
                 f"Feature configuration file {feature_config} not found."
@@ -115,12 +113,14 @@ class SaiFeaturePreprocessor(DataPreprocessor):
             A list containing a dictionary of calculated feature vectors for the genomic window.
         """
 
+
         if (
             (ref_gts is None or len(ref_gts) == 0)
             or (tgt_gts is None or len(tgt_gts) == 0)
             or (src_gts_list is None)
             or (ploidy is None)
         ):
+
             return None
             # items["statistic"] = np.nan
             # items["candidates"] = np.array([])
@@ -154,55 +154,53 @@ class SaiFeaturePreprocessor(DataPreprocessor):
             import inspect
 
             for func_name, yaml_params in self.features["Features"].items():
-
                 func = globals().get(func_name)
 
                 if not callable(func):
                     continue
 
-                sig = inspect.signature(func)
-                call_args = {}
+                yaml_param_list = yaml_params if isinstance(yaml_params, list) else [yaml_params]
 
-                if isinstance(yaml_params, dict):
-                    call_args.update(yaml_params)
-                elif isinstance(yaml_params, bool):
-                    if not yaml_params:
-                        continue  # Skip if it's explicitly False
-                    # Else: proceed with just context-based parameters
-                else:
-                    raise ValueError(
-                        f"Unsupported value type for feature '{func_name}': {type(yaml_params)}"
-                    )
+                for single_params in yaml_param_list:
+                    if isinstance(single_params, bool):
+                        if not single_params:
+                            continue
+                        single_params = {}
+                    elif not isinstance(single_params, dict):
+                        raise ValueError(f"Unsupported parameter format for {func_name}: {single_params}")
 
-                for param in sig.parameters.values():
-                    name = param.name
+                    sig = inspect.signature(func)
+                    call_args = {}
 
-                    if name in call_args:
-                        continue
-                    # features which only require one genotype matrix get the tgt matrix - usually this is the desired behaviour
-                    if name == "gts" and "tgt_gts" in basic_params:
-                        call_args["gts"] = basic_params["tgt_gts"]
-                    elif name in basic_params:
-                        call_args[name] = basic_params[name]
+                    call_args.update(single_params)
 
-                res = func(**call_args)
+                    for param in sig.parameters.values():
+                        name = param.name
+                        if name in call_args:
+                            continue
+                        if name == "gts" and "tgt_gts" in basic_params:
+                            call_args["gts"] = basic_params["tgt_gts"]
+                        elif name in basic_params:
+                            call_args[name] = basic_params[name]
 
-                if isinstance(res, tuple):
-                    for i, value in enumerate(res):
-                        key = f"{func_name}|val{i}|{yaml_params}"
-                        items[key] = value
-                else:
-                    key = f"{func_name}|{yaml_params}"
-                    items[key] = res
+                    res = func(**call_args)
 
+                    if isinstance(res, tuple):
+                        for i, value in enumerate(res):
+                            key = f"{func_name}|val{i}|{single_params}"
+                            items[key] = value
+                    else:
+                        key = f"{func_name}|{single_params}"
+                        items[key] = res
+            
                 items["tgt_gts_shape"] = tgt_gts.shape
                 items["ref_gts_shape"] = ref_gts.shape
                 items["src_gts_shape"] = src_gts.shape
 
-                if self.mut_file:
-                    from sai.utils.labelers.labelers_utils import extract_mutation_positions, label_mutation_overlap
-                    muts_of_interest = extract_mutation_positions(self.mut_file)
-                    items["Label"] = label_mutation_overlap(muts_of_interest=muts_of_interest, record=items, start_key="start", end_key="end")
+            if self.mut_file:
+                from sai.utils.labelers.labelers_utils import extract_mutation_positions, label_mutation_overlap_dict
+                muts_of_interest = extract_mutation_positions(self.mut_file)
+                items["Label"] = label_mutation_overlap_dict(muts_of_interest=muts_of_interest, record=items, start_key="start", end_key="end")
 
             all_items.append(items)
 
