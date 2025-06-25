@@ -21,6 +21,10 @@
 from typing import Any
 from sai.utils.generators import WindowGenerator
 from sai.utils.preprocessors import DataPreprocessor
+
+
+from typing import Any
+
 from .saifeature_preprocessor import SaiFeaturePreprocessor
 
 
@@ -47,7 +51,7 @@ class SaiChunkPreprocessor(DataPreprocessor):
         num_src: int = 1,
         ploidy: int = 2,
         is_phased: bool = True,
-        mut_file: str = None
+        mut_file: str = None,
     ):
         """
         Initializes a new instance of ChunkPreprocessor.
@@ -96,16 +100,14 @@ class SaiChunkPreprocessor(DataPreprocessor):
 
         anc_allele_available = anc_allele_file is not None
 
-
         self.mut_file = mut_file
 
         self.feature_preprocessor = SaiFeaturePreprocessor(
             output_file=output_file,
             feature_config=feature_config,
             anc_allele_available=anc_allele_available,
-            mut_file=self.mut_file
+            mut_file=self.mut_file,
         )
-
 
     def run(self, chr_name: str, start: int, end: int) -> list[dict[str, Any]]:
         """
@@ -140,18 +142,17 @@ class SaiChunkPreprocessor(DataPreprocessor):
             win_step=self.win_step,
             anc_allele_file=self.anc_allele_file,
             num_src=self.num_src,
-            is_phased=self.is_phased
+            is_phased=self.is_phased,
         )
 
         items = []
-
 
         for item in window_generator.get():
 
             new_item = self.feature_preprocessor.run(**item)
             if new_item:
                 items.extend(new_item)
-            #items.extend(self.feature_preprocessor.run(**item))
+            # items.extend(self.feature_preprocessor.run(**item))
 
         return items
 

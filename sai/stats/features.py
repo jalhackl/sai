@@ -43,7 +43,6 @@ def calc_freq(gts: np.ndarray, ploidy: int = 1) -> np.ndarray:
         An array of allele frequencies for each locus.
     """
 
-
     if ploidy == 1:
         return np.mean(gts, axis=1)
     else:
@@ -58,6 +57,7 @@ def compute_matching_loci(
     y_list: list[tuple[str, float]],
     ploidy: int,
     anc_allele_available: bool,
+    is_phased: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Computes loci that meet specified allele frequency conditions across reference, target, and source genotypes.
@@ -85,6 +85,8 @@ def compute_matching_loci(
     anc_allele_available : bool
         If True, checks only for matches with `y` (assuming `1` represents the derived allele).
         If False, checks both matches with `y` and `1 - y`, taking the dominant allele in the source as the reference.
+    is_phased: bool
+        If True, overwrites ploidy and sets it to 1. Default False
 
     Returns
     -------
@@ -93,10 +95,12 @@ def compute_matching_loci(
         - Adjusted target allele frequencies (`tgt_freq`).
         - Boolean array indicating loci that meet the specified frequency conditions (`condition`).
     """
+    if is_phased:
+        ploidy = 1
+
     # Validate input parameters
     if not (0 <= w <= 1):
         raise ValueError("Parameters w must be within the range [0, 1].")
-
 
     for op, y in y_list:
         if not (0 <= y <= 1):
@@ -162,6 +166,7 @@ def calc_u(
     y_list: list[tuple[str, float]],
     ploidy: int = 1,
     anc_allele_available: bool = False,
+    is_phased: bool = False,
 ) -> tuple[int, np.ndarray]:
     """
     Calculates the count of genetic loci that meet specified allele frequency conditions
@@ -192,7 +197,9 @@ def calc_u(
     anc_allele_available : bool
         If True, checks only for matches with `y` (assuming `1` represents the derived allele).
         If False, checks both matches with `y` and `1 - y`, taking the major allele in the source as the reference.
-
+    is_phased: bool
+        If True, overwrites ploidy and sets it to 1. Default False
+        
     Returns
     -------
     tuple[int, np.ndarray]
@@ -204,6 +211,9 @@ def calc_u(
     ValueError
         If `x` is outside the range [0, 1].
     """
+    if is_phased:
+        ploidy = 1
+
     # Validate input parameters
     if not (0 <= x <= 1):
         raise ValueError("Parameter x must be within the range [0, 1].")
@@ -239,6 +249,7 @@ def calc_q(
     quantile: float = 0.95,
     ploidy: int = 1,
     anc_allele_available: bool = False,
+    is_phased: bool = False,
 ) -> float:
     """
     Calculates a specified quantile of derived allele frequencies in `tgt_gts` for loci that meet specific conditions
@@ -269,7 +280,9 @@ def calc_q(
     anc_allele_available : bool
         If True, checks only for matches with `y` (assuming `1` represents the derived allele).
         If False, checks both matches with `y` and `1 - y`, taking the major allele in the source as the reference.
-
+    is_phased: bool
+        If True, overwrites ploidy and sets it to 1. Default False
+    
     Returns
     -------
     tuple[float, np.ndarray]
@@ -282,6 +295,9 @@ def calc_q(
     ValueError
         If `quantile` is outside the range [0, 1].
     """
+    if is_phased:
+        ploidy = 1
+
     # Validate input parameters
     if not (0 <= quantile <= 1):
         raise ValueError("Parameter quantile must be within the range [0, 1].")
@@ -905,7 +921,7 @@ def H1_H12_values(
     only_derived_homozygous: bool = False,
     compute_H123: bool = False,
     ploidy: int = 1,
-    error_return_value: Any = 0
+    error_return_value: Any = 0,
 ) -> Union[Tuple[float, float], Tuple[float, float, float]]:
     """
     Computes H1, H12, and optionally H123 statistics to measure haplotype homozygosity.
@@ -945,9 +961,13 @@ def H1_H12_values(
 
     if compute_H123:
         if len(freqs) > 3:
-                H123_value = ((freqs[0] + freqs[1] + freqs[2]) ** 2) + np.sum(freqs[3:] ** 2)
+            H123_value = ((freqs[0] + freqs[1] + freqs[2]) ** 2) + np.sum(
+                freqs[3:] ** 2
+            )
         else:
-            print("Warning: H123 cannot be computed because number of SNPs is too small!")
+            print(
+                "Warning: H123 cannot be computed because number of SNPs is too small!"
+            )
             H123_value = error_return_value
 
     if not compute_H123:
@@ -957,7 +977,10 @@ def H1_H12_values(
 
 
 def H2_value(
-    gts: np.ndarray, only_derived_homozygous: bool = False, ploidy: int = 1, error_return_value: Any = 0
+    gts: np.ndarray,
+    only_derived_homozygous: bool = False,
+    ploidy: int = 1,
+    error_return_value: Any = 0,
 ) -> float:
     """
     Computes the H2 statistic, which measures haplotype homozygosity excluding the most common haplotype.
@@ -992,7 +1015,10 @@ def H2_value(
 
 
 def H2_H1_ratio(
-    gts: np.ndarray, only_derived_homozygous: bool = False, ploidy: int = 1, error_return_value: Any = 0
+    gts: np.ndarray,
+    only_derived_homozygous: bool = False,
+    ploidy: int = 1,
+    error_return_value: Any = 0,
 ) -> float:
     """
     Computes the H2/H1 ratio, a measure of haplotype diversity relative to the most common haplotype.
@@ -1263,7 +1289,9 @@ def compute_ld_burrows(
     """
 
     if ploidy != 2:
-        print("Warning! This function for estimating LD is intended for diploid unphased data (encoded as 0,1,2)!")
+        print(
+            "Warning! This function for estimating LD is intended for diploid unphased data (encoded as 0,1,2)!"
+        )
 
     num_snps, num_individuals = gts.shape
 
@@ -1449,7 +1477,9 @@ def compute_LD_D_maladapt(
 
 
 def Kellys_Zns(
-    gts: np.ndarray, params_LD={"filter_unique": True, "maladapt_correction": False},error_return_value: Any = 0
+    gts: np.ndarray,
+    params_LD={"filter_unique": True, "maladapt_correction": False},
+    error_return_value: Any = 0,
 ) -> float:
     """
     Computes the Zns metric, which quantifies the overall strength of
@@ -1482,7 +1512,9 @@ def Kellys_Zns(
     prefactor_divisor = S * (S - 1)
 
     if prefactor_divisor == 0:
-        print("Warning: ZnS calculation failed, because divisor equals zero, return error_return_value!")
+        print(
+            "Warning: ZnS calculation failed, because divisor equals zero, return error_return_value!"
+        )
         return error_return_value
 
     prefactor = 2 / prefactor_divisor

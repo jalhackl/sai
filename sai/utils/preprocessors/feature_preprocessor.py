@@ -66,6 +66,7 @@ class FeaturePreprocessor(DataPreprocessor):
             If False, ancestral allele information is unavailable.
             Default is False.
         """
+        
         self.w = w
         self.x = x
         self.y = y
@@ -138,6 +139,7 @@ class FeaturePreprocessor(DataPreprocessor):
         ):
             items["statistic"] = np.nan
             items["candidates"] = np.array([])
+
         elif self.stat_type == "U":
             items["statistic"], items["candidates"] = calc_u(
                 ref_gts=ref_gts,

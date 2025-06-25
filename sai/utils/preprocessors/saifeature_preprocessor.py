@@ -22,7 +22,7 @@ class SaiFeaturePreprocessor(DataPreprocessor):
         anc_allele_available: bool = False,
         # additional phased information
         is_phased: bool = True,
-        mut_file: str = None
+        mut_file: str = None,
     ):
         """
         Initializes FeatureVectorsPreprocessor with specific frequency thresholds
@@ -113,7 +113,6 @@ class SaiFeaturePreprocessor(DataPreprocessor):
             A list containing a dictionary of calculated feature vectors for the genomic window.
         """
 
-
         if (
             (ref_gts is None or len(ref_gts) == 0)
             or (tgt_gts is None or len(tgt_gts) == 0)
@@ -159,7 +158,9 @@ class SaiFeaturePreprocessor(DataPreprocessor):
                 if not callable(func):
                     continue
 
-                yaml_param_list = yaml_params if isinstance(yaml_params, list) else [yaml_params]
+                yaml_param_list = (
+                    yaml_params if isinstance(yaml_params, list) else [yaml_params]
+                )
 
                 for single_params in yaml_param_list:
                     if isinstance(single_params, bool):
@@ -167,7 +168,9 @@ class SaiFeaturePreprocessor(DataPreprocessor):
                             continue
                         single_params = {}
                     elif not isinstance(single_params, dict):
-                        raise ValueError(f"Unsupported parameter format for {func_name}: {single_params}")
+                        raise ValueError(
+                            f"Unsupported parameter format for {func_name}: {single_params}"
+                        )
 
                     sig = inspect.signature(func)
                     call_args = {}
@@ -192,15 +195,24 @@ class SaiFeaturePreprocessor(DataPreprocessor):
                     else:
                         key = f"{func_name}|{single_params}"
                         items[key] = res
-            
+
                 items["tgt_gts_shape"] = tgt_gts.shape
                 items["ref_gts_shape"] = ref_gts.shape
                 items["src_gts_shape"] = src_gts.shape
 
             if self.mut_file:
-                from sai.utils.labelers.labelers_utils import extract_mutation_positions, label_mutation_overlap_dict
+                from sai.utils.labelers.labelers_utils import (
+                    extract_mutation_positions,
+                    label_mutation_overlap_dict,
+                )
+
                 muts_of_interest = extract_mutation_positions(self.mut_file)
-                items["Label"] = label_mutation_overlap_dict(muts_of_interest=muts_of_interest, record=items, start_key="start", end_key="end")
+                items["Label"] = label_mutation_overlap_dict(
+                    muts_of_interest=muts_of_interest,
+                    record=items,
+                    start_key="start",
+                    end_key="end",
+                )
 
             all_items.append(items)
 
