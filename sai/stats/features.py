@@ -199,7 +199,7 @@ def calc_u(
         If False, checks both matches with `y` and `1 - y`, taking the major allele in the source as the reference.
     is_phased: bool
         If True, overwrites ploidy and sets it to 1. Default False
-        
+
     Returns
     -------
     tuple[int, np.ndarray]
@@ -282,7 +282,7 @@ def calc_q(
         If False, checks both matches with `y` and `1 - y`, taking the major allele in the source as the reference.
     is_phased: bool
         If True, overwrites ploidy and sets it to 1. Default False
-    
+
     Returns
     -------
     tuple[float, np.ndarray]
@@ -332,6 +332,7 @@ def calc_rd(
     tgt_gts: np.ndarray,
     ref_gts: np.ndarray = None,
     metric: str = "cityblock",
+    mode: str = "ratio",
 ) -> float:
     """
     Compute the average ratio of sequence divergence between an individual from the
@@ -362,6 +363,9 @@ def calc_rd(
 
     metric : str, optional
         The distance metric to use for the pairwise distance calculation. Default is "cityblock".
+    
+    mode : str, optional
+        Operation used for evaluating the pairs. 'ratio', 'diff' and 'abs_diff' are supported. Default is "ratio".
 
     Returns
     -------
@@ -397,10 +401,19 @@ def calc_rd(
         row_ref_mean = mean_src_ref[j]
 
         # Accumulate the ratio of means
-        if row_ref_mean != 0:
-            average_r += row_tgt_mean / row_ref_mean
+        if mode == "ratio":
+            if row_ref_mean != 0:
+                average_r += row_tgt_mean / row_ref_mean
+            else:
+                print("Warning! An average ratio is zero!")
+        elif mode == "diff":
+            average_r += row_tgt_mean - row_ref_mean
+        elif mode == "abs_diff":
+            average_r += abs(row_tgt_mean - row_ref_mean)
         else:
-            print("Warning! An average ratio is zero!")
+            raise Exception(
+                "Mode not implemented, only 'ratio', 'diff' and 'abs_diff'!"
+            )
 
     average_r = average_r / count
     return average_r
