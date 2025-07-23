@@ -18,29 +18,34 @@
 #    https://www.gnu.org/licenses/gpl-3.0.en.html
 
 
-import allel
 import demes
 import msprime
 import os
 import tskit
-import pyslim
-import numpy as np
+from sai.utils.simulators import DataSimulator
+import random
 import subprocess
 from typing import Dict, Any, List, Optional, Union, Tuple, DefaultDict, Set
 
-from sai.utils.simulators import DataSimulator
 from sai.utils.simulators.slim_simulator_utils import (
+    _create_ref_tgt_file_slim,
+    sample_and_simplify,
+    simplify_by_source_target,
+    get_introgressed_segments,
+    write_introgressed_segments_to_tsv,
     get_individuals_with_mutations,
     write_filtered_mutation_sites_to_tsv,
 )
 
+from sai.utils.simulators.slim_simulator_maladapt_utils import combine_mutation_trees, only_add_maladapt_mutations
 
-class SlimSimulatorSCCT(DataSimulator):
+
+class SlimSimulatorMaladapt(DataSimulator):
     """
-    A simulator for generating genetic data using SLiM within a tskit-based workflow.
+    A simulator for generating genetic data using SLiM within a tskit-based workflow, following the model and specifications of Maladapt.
 
     This subclass of `DataSimulator` configures parameters specific to SLiM simulations,
-    particularly for maladaptive or uniform selection models. It manages simulation output,
+    different settings (e.g. maladapt treatment of mutations and uniform mutation rate). It manages simulation output,
     mutation parameters, and metadata relevant to downstream genetic analysis.
 
     Parameters
@@ -102,41 +107,39 @@ class SlimSimulatorSCCT(DataSimulator):
 
     def __init__(
         self,
-        slim_script_folder=os.path.join("examples", "slim", "scct"),
-        slim_script_name="scct_basic_african.slim",
-        nsamples: int = 120,
-        pop_of_interest: str = "p1",
-        seq_len: int = 3000000,
-        output_prefix: str = "slim_scct_sim",
-        output_dir: str = "slim_scct_res",
+        nref: int = 108,
+        ntgt: int = 99,
+        ref_id: str = "p1",
+        tgt_id: str = "p4",
+        src_id: str = "p2",
+        seq_len: int = 5000000,
+        output_prefix: str = "slim_sim",
+        output_dir: str = "slim_res",
         is_phased: bool = True,
         scaling_factor=10,
-        basic_mut_rate=0.0,
-        neutral_mut_rate=1.5e-8,
+        basic_mut_rate=1.5e-8,
         archaic_sample_time: int = 152,
+        nsrc: int = 2,
+        out_id: str = None,
+        nout: int = None,
         create_tracts_file: bool = False,
         create_mutation_check_file: bool = True,
         create_all_mutation_output: bool = False,
         slim_mutation_nr: int = 2,
+        maladapt_mutations_preprocess: bool = True,
         extra_mutations: bool = False,
-        recapitate_slim_sim: bool = True,
+        settings: str = "maladapt",
         resample: int = 0,
         chromosome: str = "1",
-        bottleneck_factor: float = 1,
-        expansion_factor: float = 1,
-        initial_sweep_frequency: float = 0.001,
-        selection_coefficient: float = 0.00325,
-        recombination_rate: float = 1.35e-8,
-        ancestral_Ne: int = 12500,
     ):
 
         super().__init__(
             demo_model_file=None,
-            nref=None,
-            ntgt=None,
-            ref_id=None,
-            tgt_id=None,
-            src_id=None,
+            nref=nref,
+            ntgt=ntgt,
+            ref_id=ref_id,
+            tgt_id=tgt_id,
+            src_id=src_id,
             ploidy=None,
             seq_len=seq_len,
             mut_rate=None,
@@ -144,13 +147,33 @@ class SlimSimulatorSCCT(DataSimulator):
             output_prefix=output_prefix,
             output_dir=output_dir,
         )
-
-        self.nsamples = nsamples
-
-        self.slim_script_folder = slim_script_folder
-        self.slim_script_name = slim_script_name
-
+        self.test_tgt_id = self.tgt_id
         self.is_phased = is_phased
+
+        self.nsrc = nsrc
+        self.out_id = out_id
+        self.nout = nout
+
+        self.settings = settings
+
+        if self.settings == "maladapt":
+            self.dominances = ["recessive", "additive", "partial"]
+            self.filenames = {
+                "recessive": "maladapt_repl_adaptive_recessive_exon_repl.slim",
+                "additive": "maladapt_repl_adaptive_additive_w_muteff_exons_original.slim",
+                "partial": "maladapt_repl_adaptive_partial_plus_muteff_exons_repl.slim",
+            }
+            self.slim_script_folder = os.path.join("examples", "slim", "maladapt")
+        elif self.settings == "uniform":
+            self.dominances = ["uniform"]
+            self.filenames = {
+                "uniform": "simpler_adapt_v1_plus_params.slim",
+            }
+            self.slim_script_folder = os.path.join("examples", "slim")
+        else:
+            raise Exception(
+                "Model settings currently not supported (only maladapt and uniform)!"
+            )
 
         self.create_tracts_file = create_tracts_file
         self.create_mutation_check_file = create_mutation_check_file
@@ -162,37 +185,24 @@ class SlimSimulatorSCCT(DataSimulator):
         self.basic_mut_rate = basic_mut_rate
         self.mu = self.basic_mut_rate * self.scaling_factor
 
-        self.neutral_mut_rate = neutral_mut_rate
-        self.neutral_mut_rate_scaled = neutral_mut_rate * self.scaling_factor
-
         self.slim_mutation_nr = slim_mutation_nr
 
         self.extra_mutations = extra_mutations
+        self.maladapt_mutations_preprocess = maladapt_mutations_preprocess
 
         self.archaic_sample_time = archaic_sample_time
-        self.pops = {"pop_of_interest": pop_of_interest}
-        self.sample_sizes = {"pop_of_interest": nsamples}
+        self.pops = {"ref": ref_id, "src": src_id, "tgt": tgt_id}
+        self.sample_sizes = {"ref": nref, "src": nsrc, "tgt": ntgt}
 
-        self.seq_length = seq_len
+        self.seq_len = seq_len
+
+        self.exon_file = os.path.join(
+            self.slim_script_folder, "sim_seq_info_chr3region.txt"
+        )
 
         self.resample = resample
 
         self.chromosome = chromosome
-
-        self.pop_of_interest = pop_of_interest
-
-        self.recapitate_slim_sim = recapitate_slim_sim
-
-        self.bottleneck_factor = bottleneck_factor
-        self.expansion_factor = expansion_factor
-        self.initial_sweep_frequency = initial_sweep_frequency
-        self.selection_coefficient = selection_coefficient
-        self.recombination_rate = recombination_rate
-
-        self.recombination_rate_scaled = 0.5 * (
-            1 - (1 - 2 * self.recombination_rate) ** self.scaling_factor
-        )
-        self.ancestral_Ne = ancestral_Ne / self.scaling_factor
 
     def run(self, rep: int = None, seed: int = None) -> list[dict[str, str]]:
         """
@@ -224,19 +234,32 @@ class SlimSimulatorSCCT(DataSimulator):
             self.output_prefix if rep is None else f"{self.output_prefix}.{rep}"
         )
 
-        slim_script_name = self.slim_script_name
+        adm_range = [0.01, 0.02, 0.05, 0.1]
+
+        dominance = random.choice(self.dominances)
+        adm_time = random.choice(range(8697, 8747))
+        adm_amount = random.choice(adm_range)
+        sel_time = random.choice(range(0, 61))
+        slim_script_name = self.filenames[dominance]
 
         slim_script = os.path.join(self.slim_script_folder, slim_script_name)
 
         os.makedirs(output_dir, exist_ok=True)
-        ts_file = os.path.join(output_dir, f"{output_prefix}.ts")
-        txt_file = os.path.join(output_dir, f"{output_prefix}.txt")
-
+        ts_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.ts")
+        txt_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.txt")
+        vcf_file = os.path.join(output_dir, f"{output_prefix}_{dominance}.vcf")
         bed_file = os.path.join(output_dir, f"{output_prefix}.true.tracts.bed")
-        ind_file = os.path.join(output_dir, f"{output_prefix}.ind.list")
+        ref_ind_file = os.path.join(output_dir, f"{output_prefix}.ref.ind.list")
+        tgt_ind_file = os.path.join(output_dir, f"{output_prefix}.tgt.ind.list")
 
-        vcf_file = os.path.join(output_dir, f"{output_prefix}.vcf")
-        slim_vcf_file = os.path.join(output_dir, f"{output_prefix}_slim.vcf")
+        if self.nsrc is not None and self.nsrc > 0:
+            src_ind_file = os.path.join(output_dir, f"{output_prefix}.src.ind.list")
+        else:
+            src_ind_file = None
+        if self.nout is not None and self.nout > 0:
+            out_ind_file = os.path.join(output_dir, f"{output_prefix}.out.ind.list")
+        else:
+            out_ind_file = None
 
         mut_tgt_file = os.path.join(output_dir, f"{output_prefix}.tgt.mut.list")
 
@@ -244,11 +267,11 @@ class SlimSimulatorSCCT(DataSimulator):
             "ts_file": ts_file,
             "vcf_file": vcf_file,
             "bed_file": bed_file,
-            "ind_file": ind_file,
+            "ref_ind_file": ref_ind_file,
+            "tgt_ind_file": tgt_ind_file,
+            "src_ind_file": src_ind_file,
             "txt_file": txt_file,
-            "slim_vcf_file": slim_vcf_file,
         }
-
         if self.create_mutation_check_file:
             file_paths["mut_file"] = mut_tgt_file
 
@@ -256,59 +279,94 @@ class SlimSimulatorSCCT(DataSimulator):
         if self.resample == 0:
             all_file_paths.append(file_paths)
 
-        simulation = self.perform_slim_simulation(file_paths, slim_script, rep)
+        simulation = self.perform_slim_simulation(
+            file_paths, slim_script, adm_time, sel_time, adm_amount, dominance, rep
+        )
 
         ts_path = simulation["output_file"]
         ts = tskit.load(ts_path)
+
+        # get simuation tree sequence (ts)
 
         if self.resample > 0:
             print("currently not implemented!")
             pass
 
-        if self.recapitate_slim_sim:
-            ts = pyslim.recapitate(
-                ts,
-                ancestral_Ne=self.ancestral_Ne,
-                recombination_rate=self.recombination_rate_scaled,
-            )
-
         # simplify and sample part
-        rng = np.random.default_rng()
-        alive_inds = pyslim.individuals_alive_at(ts, 0)
-        keep_indivs = rng.choice(alive_inds, self.nsamples, replace=False)
-        keep_nodes = []
-        for i in keep_indivs:
-            keep_nodes.extend(ts.individual(i).nodes)
-
-        ts_simplified = ts.simplify(keep_nodes, keep_input_roots=True)
-
-        if self.extra_mutations:
-            ts_simplified = msprime.mutate(
-                ts_simplified, rate=self.neutral_mut_rate_scaled, keep=True
+        ts_simplified, all_ps_simplified, all_p_ref, all_p_tgt, all_p_src = (
+            sample_and_simplify(
+                ts,
+                pops=self.pops,
+                sample_sizes=self.sample_sizes,
+                archaic_sample_time=self.archaic_sample_time,
+                seed=seed,
             )
+        )
+
+        if self.maladapt_mutations_preprocess:
+            start, end = self.read_exon_file(self.exon_file)
+            if not self.extra_mutations:
+                ts_simplified = combine_mutation_trees(
+                    ts_simplified,
+                    self.mu,
+                    start,
+                    end,
+                    filename=None,
+                    write_vcf=False,
+                    save_trees=False,
+                )
+            else:
+                ts_simplified = only_add_maladapt_mutations(
+                    ts_sample=ts_simplified,
+                    mu=self.mu,
+                    start=start,
+                    end=end,
+                    filename=None,
+                )
+
+        if self.extra_mutations and not self.maladapt_mutations_preprocess:
+            ts_simplified = msprime.mutate(ts_simplified, rate=self.mu, keep=True)
 
         # write vcf
-        indivlist = []
-        for i in pyslim.individuals_alive_at(ts_simplified, 0):
-            ind = ts_simplified.individual(i)
-            if ts_simplified.node(ind.nodes[0]).is_sample():
-                indivlist.append(i)
-
-        with open(file_paths["vcf_file"], "w") as vcffile:
+        with open(file_paths["vcf_file"], "w") as vcf_file:
             ts_simplified.write_vcf(
-                vcffile, individuals=indivlist, allow_position_zero=True
+                vcf_file,
+                individuals=all_ps_simplified,
+                individual_names=[self.identifier + str(x) for x in all_ps_simplified],
+                allow_position_zero=True
             )
-        self.write_vcf_sample_list(
-            vcf_path=file_paths["vcf_file"],
-            output_file=file_paths["ind_file"],
-            population_label=self.pop_of_interest,
+
+        # create sample files
+        _create_ref_tgt_file_slim(
+            ref_ind_file=file_paths["ref_ind_file"],
+            tgt_ind_file=file_paths["tgt_ind_file"],
+            all_p_ref=all_p_ref,
+            all_p_tgt=all_p_tgt,
+            pops=self.pops,
+            identifier="tsk_",
+            src_ind_file=file_paths["src_ind_file"],
+            all_p_src=all_p_src,
         )
+
+        if self.create_tracts_file:
+            ts_only_src_tgt = simplify_by_source_target(
+                ts_simplified, source_pop_name=self.src_id, target_pop_name=self.tgt_id
+            )
+            fragments = get_introgressed_segments(
+                ts_only_src_tgt,
+                source_pop_name=self.src_id,
+                target_pop_name=self.tgt_id,
+                print_results=False,
+            )
+            write_introgressed_segments_to_tsv(
+                fragments, file_paths["bed_file"], chrom="1"
+            )
 
         if self.create_mutation_check_file:
             phased_mutations_list = get_individuals_with_mutations(
                 ts_simplified,
                 target_mut_type_ids={self.slim_mutation_nr},
-                target_pop_name=self.pop_of_interest,
+                target_pop_name=self.tgt_id,
                 target_pop_id=None,
                 only_alive=True,
                 print_results=False,
@@ -323,29 +381,14 @@ class SlimSimulatorSCCT(DataSimulator):
 
         return all_file_paths
 
-    def write_vcf_sample_list(self, vcf_path, output_file, population_label="p1"):
-        """
-        Extracts sample names from a VCF file and writes them to a file
-        with the format: <population_label>\t<sample_name>
-
-        Args:
-            vcf_path (str): Path to the VCF file.
-            population_label (str): Population label to prefix each sample.
-            output_file (str): Path to the output file to write the sample list.
-        """
-
-        callset = allel.read_vcf(vcf_path)
-
-        sample_list = callset["samples"]
-
-        with open(output_file, "w") as f:
-            for sample in sample_list:
-                f.write(f"{population_label}\t{sample}\n")
-
     def perform_slim_simulation(
         self,
         file_paths: Dict[str, str],
         slim_script: str,
+        adm_time: int,
+        sel_time: int,
+        adm_amount: float,
+        dominance: str,
         rep: int,
     ) -> Dict[str, Any]:
         """
@@ -387,13 +430,10 @@ class SlimSimulatorSCCT(DataSimulator):
         """
         simulation = {}
 
-        simulation["seq_length"] = self.seq_length
-        simulation["bottleneck_factor"] = self.bottleneck_factor
-        simulation["expansion_factor"] = self.expansion_factor
-        simulation["initial_sweep_frequency"] = self.initial_sweep_frequency
-        simulation["selection_coefficient"] = self.selection_coefficient
-        simulation["mutation_rate"] = self.basic_mut_rate
-        simulation["recombination_rate"] = self.recombination_rate
+        simulation["adm_time"] = adm_time
+        simulation["sel_time"] = sel_time
+        simulation["adm_amount"] = adm_amount
+        simulation["dominance"] = dominance
 
         output_file = file_paths["ts_file"]
         txt_file = file_paths["txt_file"]
@@ -401,8 +441,6 @@ class SlimSimulatorSCCT(DataSimulator):
         simulation["slim_script"] = slim_script
         simulation["output_file"] = output_file
         simulation["txt_file"] = txt_file
-
-        slim_vcf_file = file_paths["slim_vcf_file"]
 
         sub_output = subprocess.run(
             [
@@ -412,28 +450,21 @@ class SlimSimulatorSCCT(DataSimulator):
                 "-d",
                 f'txt_path="{txt_file}"',
                 "-d",
-                f'output_vcf="{slim_vcf_file}"',
+                f"adm_time={adm_time}",
                 "-d",
-                f"seq_length={self.seq_length}",
+                f"sel_time={sel_time}",
                 "-d",
-                f"bottleneck_factor={self.bottleneck_factor}",
-                "-d",
-                f"expansion_factor={self.expansion_factor}",
-                "-d",
-                f"initial_sweep_frequency={self.initial_sweep_frequency}",
-                "-d",
-                f"selection_coefficient={self.selection_coefficient}",
-                "-d",
-                f"mutation_rate={self.basic_mut_rate}",
-                "-d",
-                f"recombination_rate={self.recombination_rate}",
-                "-d",
-                f"scaling_factor={self.scaling_factor}",
+                f"adm_amount={adm_amount}",
                 slim_script,
             ],
             capture_output=True,
             text=True,
         )
+
+        if "Finish due to no mutation of type 2" in sub_output.stdout:
+            simulation["mutation"] = False
+        else:
+            simulation["mutation"] = True
 
         simulation["output"] = sub_output
         simulation["rep"] = rep

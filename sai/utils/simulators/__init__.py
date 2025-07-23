@@ -24,3 +24,4 @@ from .LRTrainingDataSimulator import LRTrainingDataSimulator
 from .SlimSimulator import SlimSimulator
 from .SlimSimulatorSCCT import SlimSimulatorSCCT
 from .SlimSimulatorRacimo import SlimSimulatorRacimo
+from .SlimSimulatorMaladapt import SlimSimulatorMaladapt
