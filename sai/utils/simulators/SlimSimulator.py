@@ -291,7 +291,9 @@ class SlimSimulator(DataSimulator):
         if self.resample == 0:
             all_file_paths.append(file_paths)
 
-        simulation = self.perform_slim_simulation(file_paths, slim_script, rep)
+        simulation = self.perform_slim_simulation(
+            file_paths, slim_script, rep, seed=seed
+        )
 
         ts_path = simulation["output_file"]
         ts = tskit.load(ts_path)
@@ -386,10 +388,7 @@ class SlimSimulator(DataSimulator):
         return all_file_paths
 
     def perform_slim_simulation(
-        self,
-        file_paths: Dict[str, str],
-        slim_script: str,
-        rep: int,
+        self, file_paths: Dict[str, str], slim_script: str, rep: int, seed: int = None
     ) -> Dict[str, Any]:
         """
         Executes a SLiM simulation with specified admixture and selection parameters.
@@ -447,33 +446,39 @@ class SlimSimulator(DataSimulator):
 
         slim_vcf_file = file_paths["slim_vcf_file"]
 
+        slim_args = [
+            "slim",
+            "-d",
+            f'output_path="{output_file}"',
+            "-d",
+            f'txt_path="{txt_file}"',
+            "-d",
+            f'output_vcf="{slim_vcf_file}"',
+            "-d",
+            f"seq_length={self.seq_len}",
+            "-d",
+            f"initial_sweep_frequency={self.initial_sweep_frequency}",
+            "-d",
+            f"selection_coefficient={self.selection_coefficient}",
+            "-d",
+            f"mutation_rate={self.basic_mut_rate}",
+            "-d",
+            f"recombination_rate={self.recombination_rate}",
+            "-d",
+            f"scaling_factor={self.scaling_factor}",
+            "-d",
+            f"adm_amount={self.adm_amount}",
+            "-d",
+            f"slim_archaic_sample_generations_unscaled={self.src_sample_generations}",
+        ]
+
+        if seed is not None:
+            slim_args.extend(["-d", f"seed={seed}"])
+
+        slim_args.append(slim_script)
+
         sub_output = subprocess.run(
-            [
-                "slim",
-                "-d",
-                f'output_path="{output_file}"',
-                "-d",
-                f'txt_path="{txt_file}"',
-                "-d",
-                f'output_vcf="{slim_vcf_file}"',
-                "-d",
-                f"seq_length={self.seq_len}",
-                "-d",
-                f"initial_sweep_frequency={self.initial_sweep_frequency}",
-                "-d",
-                f"selection_coefficient={self.selection_coefficient}",
-                "-d",
-                f"mutation_rate={self.basic_mut_rate}",
-                "-d",
-                f"recombination_rate={self.recombination_rate}",
-                "-d",
-                f"scaling_factor={self.scaling_factor}",
-                "-d",
-                f"adm_amount={self.adm_amount}",
-                "-d",
-                f"slim_archaic_sample_generations_unscaled={self.src_sample_generations}",
-                slim_script,
-            ],
+            slim_args,
             capture_output=True,
             text=True,
         )

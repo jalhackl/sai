@@ -16,3 +16,8 @@ dependencies:
   - pytest-cov=6.0.0
   - scikit-allel=1.3.7
   - scipy=1.12.0
+  - tskit=0.6
+  - slim=4.3
+  - pyslim=1.0.4
+  - pyranges=0.0.129
+  - msprime=1.3.1
